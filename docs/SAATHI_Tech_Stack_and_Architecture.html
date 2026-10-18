@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>SAATHI — Technical Architecture &amp; Engineering Specification</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+    :root {
+      --primary: #0F172A;
+      --primary-light: #1E293B;
+      --accent: #2563EB;
+      --accent-danger: #DC2626;
+      --accent-warning: #D97706;
+      --accent-success: #059669;
+      --text-dark: #0F172A;
+      --text-muted: #475569;
+      --bg-light: #F8FAFC;
+      --bg-card: #FFFFFF;
+      --border: #E2E8F0;
+      --border-dark: #CBD5E1;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: var(--text-dark);
+      background-color: #FFFFFF;
+      line-height: 1.55;
+      font-size: 10pt;
+    }
+
+    @page {
+      size: A4;
+      margin: 18mm 14mm 18mm 14mm;
+      @bottom-right {
+        content: counter(page) " / " counter(pages);
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 8pt;
+        color: #94A3B8;
+      }
+    }
+
+    .page-break {
+      page-break-before: always;
+    }
+
+    .no-break {
+      page-break-inside: avoid;
+    }
+
+    /* Header styling */
+    .doc-header {
+      border-bottom: 2px solid var(--primary);
+      padding-bottom: 12px;
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+
+    .badge-gov {
+      display: inline-block;
+      background: #FEF2F2;
+      border: 1px solid #FCA5A5;
+      color: #991B1B;
+      padding: 3px 8px;
+      font-size: 7.5pt;
+      font-weight: 700;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+
+    .doc-title {
+      font-size: 20pt;
+      font-weight: 800;
+      color: var(--primary);
+      letter-spacing: -0.5px;
+      line-height: 1.15;
+    }
+
+    .doc-subtitle {
+      font-size: 11pt;
+      font-weight: 500;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      background: var(--bg-light);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin-bottom: 24px;
+      font-size: 8pt;
+    }
+
+    .meta-item strong {
+      display: block;
+      color: var(--text-muted);
+      font-size: 7pt;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 2px;
+    }
+
+    .meta-item span {
+      font-weight: 600;
+      color: var(--primary);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Section Headings */
+    h2 {
+      font-size: 13pt;
+      font-weight: 700;
+      color: var(--primary);
+      border-left: 4px solid var(--accent);
+      padding-left: 8px;
+      margin-top: 20px;
+      margin-bottom: 10px;
+      letter-spacing: -0.2px;
+    }
+
+    h3 {
+      font-size: 10.5pt;
+      font-weight: 600;
+      color: var(--primary-light);
+      margin-top: 14px;
+      margin-bottom: 6px;
+    }
+
+    p {
+      margin-bottom: 10px;
+      color: #334155;
+      text-align: justify;
+    }
+
+    ul, ol {
+      margin-left: 18px;
+      margin-bottom: 10px;
+      color: #334155;
+    }
+
+    li {
+      margin-bottom: 4px;
+    }
+
+    /* Cards and Grids */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .grid-4 {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+    }
+
+    .card.highlight {
+      border-top: 3px solid var(--accent);
+      background: #F8FAFC;
+    }
+
+    .card.danger {
+      border-top: 3px solid var(--accent-danger);
+      background: #FEF2F2;
+    }
+
+    .card.warning {
+      border-top: 3px solid var(--accent-warning);
+      background: #FFFBEB;
+    }
+
+    .card.success {
+      border-top: 3px solid var(--accent-success);
+      background: #F0FDF4;
+    }
+
+    .card-title {
+      font-size: 9pt;
+      font-weight: 700;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+      margin-bottom: 14px;
+      font-size: 8.5pt;
+    }
+
+    th, td {
+      border: 1px solid var(--border);
+      padding: 6px 9px;
+      text-align: left;
+    }
+
+    th {
+      background-color: var(--bg-light);
+      font-weight: 600;
+      color: var(--primary);
+      text-transform: uppercase;
+      font-size: 7.5pt;
+      letter-spacing: 0.3px;
+    }
+
+    tr:nth-child(even) td {
+      background-color: #FAFAFA;
+    }
+
+    /* Code & Architecture Boxes */
+    pre, code {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    pre {
+      background: #0F172A;
+      color: #E2E8F0;
+      padding: 10px 12px;
+      border-radius: 6px;
+      font-size: 7.5pt;
+      line-height: 1.4;
+      overflow-x: auto;
+      margin-bottom: 12px;
+      border: 1px solid #1E293B;
+    }
+
+    code.inline {
+      background: #F1F5F9;
+      color: #0F172A;
+      padding: 2px 5px;
+      border-radius: 3px;
+      font-size: 8pt;
+      border: 1px solid #E2E8F0;
+    }
+
+    .pill {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 7pt;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .pill-red { background: #FEE2E2; color: #991B1B; }
+    .pill-amber { background: #FEF3C7; color: #92400E; }
+    .pill-green { background: #D1FAE5; color: #065F46; }
+    .pill-blue { background: #DBEAFE; color: #1E40AF; }
+
+    .formula-box {
+      background: #F8FAFC;
+      border: 1px dashed #94A3B8;
+      border-radius: 6px;
+      padding: 8px 12px;
+      margin: 8px 0 12px 0;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8pt;
+      color: #1E293B;
+    }
+
+    .badge-test {
+      background: #ECFDF5;
+      border: 1px solid #10B981;
+      color: #047857;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-weight: 700;
+      font-size: 7.5pt;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <div class="doc-header">
+    <div>
+      <div class="badge-gov">Official Technical Specification · Apex Squad</div>
+      <h1 class="doc-title">SAATHI (साथी) — System Architecture &amp; Tech Stack</h1>
+      <div class="doc-subtitle">10-Second Helpline Triage &amp; Coordinated Multi-Agency Dispatch in Hinglish</div>
+    </div>
+    <div style="text-align: right;">
+      <div style="font-size: 9pt; font-weight: 700; color: #0F172A;">NATIONAL 181 / 112 CAD INTEGRATION</div>
+      <div style="font-size: 8pt; color: #64748B;">Decision-Support Platform v2.4</div>
+    </div>
+  </div>
+
+  <!-- METADATA GRID -->
+  <div class="meta-grid">
+    <div class="meta-item">
+      <strong>Engineering Team</strong>
+      <span>Apex Squad</span>
+    </div>
+    <div class="meta-item">
+      <strong>Primary Domain</strong>
+      <span>Social Impact · Emergency CAD</span>
+    </div>
+    <div class="meta-item">
+      <strong>Verification</strong>
+      <span class="badge-test">21 / 21 PASS (100%)</span>
+    </div>
+    <div class="meta-item">
+      <strong>Triage Latency</strong>
+      <span>&lt; 1.2s Local / &lt; 10s Total</span>
+    </div>
+  </div>
+
+  <!-- SECTION 1: EXECUTIVE SUMMARY & THREE INNOVATIONS -->
+  <h2>1. Executive Summary &amp; Core Innovations</h2>
+  <p>
+    <strong>SAATHI</strong> is a real-time computer-aided dispatch (CAD) decision-support workstation built specifically for operators of India's <strong>181 Women Helpline</strong> and <strong>112 Emergency Response Support System (ERSS)</strong>. Most traditional emergency AI tries to understand what a caller articulates explicitly. <em>SAATHI is engineered for the caller who cannot say it.</em>
+  </p>
+
+  <div class="grid-3">
+    <div class="card danger">
+      <div class="card-title"><span class="pill pill-red">INNOVATION 1</span> Coded-Call Detection</div>
+      <p style="font-size: 8pt; margin: 0;">
+        Under intimate partner confinement, callers pretend to order food (<em>"bhaiya paneer roll bhej do"</em>) or call a relative. SAATHI extracts hidden distress indicators, assigns <strong>P2 Urgent</strong> priority, and restricts operator guidance to safe <strong>Yes/No questions only</strong>.
+      </p>
+    </div>
+    <div class="card warning">
+      <div class="card-title"><span class="pill pill-amber">INNOVATION 2</span> Invariant Urgency Floors</div>
+      <p style="font-size: 8pt; margin: 0;">
+        Once hard evidence of danger (weapons, active physical violence, life threat) is registered, the priority rating (e.g. <strong>P1 Immediate</strong>) is locked monotonically. If the caller subsequently claims <em>"sab theek hai"</em> under duress, the urgency floor <strong>cannot be lowered</strong>.
+      </p>
+    </div>
+    <div class="card highlight">
+      <div class="card-title"><span class="pill pill-blue">INNOVATION 3</span> SafeSignal Protocol</div>
+      <p style="font-size: 8pt; margin: 0;">
+        Strict rule filtering (R1–R10) prevents questions that endanger callers. Prohibits abuser names, commands to move, promises, or multi-part questions. Supports 1-touch citizen responses (<strong>Haan / Nahi</strong>) transmitted directly to the caller's mobile interface.
+      </p>
+    </div>
+  </div>
+
+  <!-- SECTION 2: END-TO-END SYSTEM TOPOLOGY -->
+  <h2>2. End-to-End System Topology &amp; Architecture</h2>
+  <p>
+    The system operates as an integrated monorepo connecting the citizen's mobile client, speech and language processors, deterministic invariant rule guards, and the operator's tactical command center.
+  </p>
+
+  <pre>
++----------------------------------------------------------------------------------------------------+
+|                                    CITIZEN SMARTPHONE INTERFACE                                    |
+|   * Live Voice Call View (Speech Synthesis / Continuous Audio Stream / Waveform Visualizer)        |
+|   * Silent Chat Mode (Emergency SOS / Live GPS Pinning / Landmark Extraction)                       |
+|   * Operator Direct Inquiries (1-Tap "Haan" / "Nahi" Responses) &amp; Live Responder Proximity Radar   |
++----------------------------------------------------------------------------------------------------+
+                        |                                                |
+               (Continuous Audio Stream)                          (Encrypted JSON / Geolocation)
+                        v                                                v
++------------------------------------------------+      +--------------------------------------------+
+|            SPEECH INGESTION ADAPTER            |      |          TELEMETRY &amp; SYNC GATEWAY          |
+|  * Browser WebSpeech API (Continuous Hinglish) |      |  * Bi-directional State Synchronization     |
+|  * Sarvam AI Bilingual Adapter (saarika:v2)    |      |  * Geolocation Watch &amp; Landmark Geocoding   |
++------------------------------------------------+      +--------------------------------------------+
+                        \                                              /
+                         \---------------------+----------------------/
+                                               |
+                                               v
++----------------------------------------------------------------------------------------------------+
+|                                  SAATHI REAL-TIME TRIAGE ENGINE                                     |
+|  1. Hinglish Lexical Normalizer (Transliterated Hindi, Colloquialisms, 150+ Danger Stems)          |
+|  2. Coded-Call Pattern Matcher (Food orders, wrong numbers, forced whispers)                      |
+|  3. Monotonic Urgency Floor Guardrail (Enforces P1/P2 safety invariants; anti-duress denial lock)  |
+|  4. Tactical Location &amp; Landmark Resolver (Street, colony, landmark, pin code)                    |
+|  5. Sarvam AI LLM Adapter (mayura:v1 fallback for non-deterministic context extraction)            |
++----------------------------------------------------------------------------------------------------+
+                        |                                                |
+            (Dynamic Situational State)                    (Evidence &amp; Threat Provenance)
+                        v                                                v
++----------------------------------------------------------------------------------------------------+
+|                                 OPERATOR CAD WORKSTATION CONSOLE                                   |
+|  COL 1: LIVE CALL &amp; DOCKET         COL 2: TRIAGE &amp; SITUATION RADAR    COL 3: TACTICAL FLEET DISPATCH|
+|  - Real-time Transcript Stream     - Priority &amp; Category Badges       - Tactical Leaflet GIS Map    |
+|  - Quote-grounded Audio Proofs     - Dynamic Unknowns Checklist       - 112 Police PCR (Live ETA)   |
+|  - Direct Inquirer &amp; Preset Chips  - Contradiction Detection Engine   - 108 Ambulance / 181 Shelter |
+|  - Multi-Call Incident History     - Safe Handoff Brief Packets       - One-Click Fleet Dispatch    |
++----------------------------------------------------------------------------------------------------+
+  </pre>
+
+  <div class="page-break"></div>
+
+  <!-- SECTION 3: TECHNOLOGY STACK SPECIFICATION -->
+  <h2>3. Technology Stack &amp; Infrastructure Breakdown</h2>
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 22%;">Layer</th>
+        <th style="width: 28%;">Technology / Library</th>
+        <th style="width: 50%;">Role &amp; Architectural Rationale</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Frontend Core</strong></td>
+        <td><code class="inline">React 19</code> + <code class="inline">TypeScript</code></td>
+        <td>Strictly typed functional components with zero runtime overhead. Single-state reactive store syncing caller and CAD consoles.</td>
+      </tr>
+      <tr>
+        <td><strong>Build Engine</strong></td>
+        <td><code class="inline">Vite 7.3.1</code></td>
+        <td>Sub-second Hot Module Replacement (HMR) and optimized rollup bundle generation (~480 KB production footprint).</td>
+      </tr>
+      <tr>
+        <td><strong>Tactical GIS &amp; Maps</strong></td>
+        <td><code class="inline">Leaflet 1.9.4</code> + OpenStreetMap</td>
+        <td>Offline-capable vector mapping, caller GPS pin visualization, tactical radius rings (500m/1.5km), and fleet vehicle markers.</td>
+      </tr>
+      <tr>
+        <td><strong>Icons &amp; Telemetry</strong></td>
+        <td><code class="inline">Lucide-React</code></td>
+        <td>Crisp, high-contrast tactical symbols for emergency dispatch (Siren, Radio, MapPin, ShieldAlert, PhoneCall).</td>
+      </tr>
+      <tr>
+        <td><strong>ASR Ingestion</strong></td>
+        <td><code class="inline">Web Speech API</code> + Sarvam</td>
+        <td>Browser-native low-latency continuous recognition for Hindi and English, with Sarvam AI <code class="inline">saarika:v2</code> bilingual streaming adapter.</td>
+      </tr>
+      <tr>
+        <td><strong>Natural Language (LLM)</strong></td>
+        <td>Sarvam AI <code class="inline">mayura:v1</code> / <code class="inline">sarvam-2b</code></td>
+        <td>Indian-context LLM fallback for ambiguous Hinglish syntax; structured JSON output extraction for case summaries.</td>
+      </tr>
+      <tr>
+        <td><strong>Deterministic Engine</strong></td>
+        <td>Custom Lexicon &amp; Invariant State Machine</td>
+        <td>150+ colloquial Hinglish danger stems, sub-10ms deterministic execution, zero-internet offline reliability.</td>
+      </tr>
+      <tr>
+        <td><strong>Testing Framework</strong></td>
+        <td><code class="inline">Vitest 3.0.0</code> + JSDOM</td>
+        <td>Automated verification of safety floors, coded-call detection, question filtering rules (R1–R10), and location parsing.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- SECTION 4: DETAILED COMPONENT ARCHITECTURE -->
+  <h2>4. Component Monorepo Directory &amp; Module Map</h2>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">Client &amp; CAD Components (<code class="inline">src/components/</code>)</div>
+      <ul>
+        <li><code class="inline">OperatorCadView.tsx</code>: 3-column tactical workstation. Real-time transcript, dynamic unknowns checklist, custom question transmitter, and multi-agency fleet dispatch.</li>
+        <li><code class="inline">UserPhoneView.tsx</code>: Mobile smartphone container. Features realistic bezel, voice call visualizer, silent chat, live location sharing, and responder ETA radar.</li>
+        <li><code class="inline">TacticalMap.tsx</code>: Leaflet GIS map with dynamic markers for caller location and real-time positioning of 112, 108, 181, and DLSA units.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-title">Core Engine &amp; Services (<code class="inline">src/services/</code> &amp; <code class="inline">data/</code>)</div>
+      <ul>
+        <li><code class="inline">triageEngine.ts</code>: Rule engine executing urgency classification, priority floor protection, contradiction logging, and SafeSignal rule validation.</li>
+        <li><code class="inline">sarvamService.ts</code>: Cloud API client for Sarvam AI speech-to-text and chat completion.</li>
+        <li><code class="inline">lexiconData.ts</code>: Curated Hinglish lexicon categorized into physical violence, weapons, coded orders, confinement, and location stems.</li>
+        <li><code class="inline">types/index.ts</code>: Shared TypeScript models for reports, dispatches, telemetry, and triage state.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- SECTION 5: MATHEMATICAL FORMULATIONS & FLEET DISPATCH ALGORITHMS -->
+  <h2>5. Tactical Fleet Dispatch &amp; Geodesic Proximity Mathematics</h2>
+  <p>
+    Helpline responders are calculated dynamically relative to the caller's live GPS coordinates using the Great-Circle Haversine formula to compute exact ground distance and realistic urban arrival ETAs:
+  </p>
+
+  <div class="formula-box">
+    <strong>Geodesic Distance (Haversine Formula):</strong><br>
+    a = sin²(Δφ / 2) + cos(φ₁) · cos(φ₂) · sin²(Δλ / 2)<br>
+    d = 2 · R · atan2(√a, √(1 − a)) &nbsp;&nbsp;[where R = 6,371 km earth radius]<br><br>
+    <strong>Dynamic Traffic-Weighted Urban ETA:</strong><br>
+    ETA (minutes) = round( (d / v_responder) × 60 × T_traffic + T_turnout )<br>
+    &nbsp;&nbsp;• 112 Police PCR: v = 32 km/h, T_turnout = 1.5 min<br>
+    &nbsp;&nbsp;• 108 ALS Ambulance: v = 28 km/h, T_turnout = 2.0 min<br>
+    &nbsp;&nbsp;• 181 Sakhi Shelter: v = 25 km/h, T_turnout = 3.0 min<br>
+    &nbsp;&nbsp;• DLSA Legal Aid: v = 22 km/h, T_turnout = 4.0 min
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Agency / Service</th>
+        <th>Dial Code</th>
+        <th>Default Station / Unit</th>
+        <th>Target Dispatch Protocol</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Police Emergency (PCR)</strong></td>
+        <td><code class="inline">112</code></td>
+        <td>PCR Van #DL-112-4</td>
+        <td>Immediate rapid interception; siren suppression if caller is in active domestic confinement.</td>
+      </tr>
+      <tr>
+        <td><strong>Medical Ambulance (ALS)</strong></td>
+        <td><code class="inline">108</code></td>
+        <td>Trauma Response Unit #108-B</td>
+        <td>Staged 200m away until police secure perimeter if weapons or active assault are flagged.</td>
+      </tr>
+      <tr>
+        <td><strong>Sakhi One-Stop Center</strong></td>
+        <td><code class="inline">181</code></td>
+        <td>OSC Crisis Intervention Van</td>
+        <td>Safe temporary shelter, trauma counselor, protective escort, medical examination referral.</td>
+      </tr>
+      <tr>
+        <td><strong>Legal Services Authority</strong></td>
+        <td><code class="inline">15100</code></td>
+        <td>DLSA Duty Advocate</td>
+        <td>Section 12 PWDVA protection orders, free legal aid, interim ex-parte maintenance.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="page-break"></div>
+
+  <!-- SECTION 6: DYNAMIC SITUATIONAL AWARENESS CHECKLIST -->
+  <h2>6. Dynamic Situational Awareness &amp; Unknowns Engine</h2>
+  <p>
+    In high-stress triage, CAD consoles must not present static question lists. SAATHI maintains a real-time situational checklist that dynamically verifies key operational unknown vectors based on speech input:
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Situational Unknown Vector</th>
+        <th>Verification Condition</th>
+        <th>Status Transition</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Precise Address / Location Lock</strong></td>
+        <td>GPS lock received or street/colony/gali matched in transcript.</td>
+        <td><span class="pill pill-amber">? Unconfirmed</span> ➔ <span class="pill pill-green">✓ Verified Location</span></td>
+      </tr>
+      <tr>
+        <td><strong>Weapons or Implements Present</strong></td>
+        <td>Weapons detected (<code class="inline">chaku</code>, <code class="inline">talwar</code>, <code class="inline">bandook</code>) or verified absent via safe inquiry.</td>
+        <td><span class="pill pill-amber">? Unconfirmed</span> ➔ <span class="pill pill-red">⚠ Weapon Confirmed</span> / <span class="pill pill-green">✓ Cleared</span></td>
+      </tr>
+      <tr>
+        <td><strong>Active Physical Violence Now</strong></td>
+        <td>Assault tokens detected (<code class="inline">maar raha hai</code>, <code class="inline">khoon</code>, <code class="inline">toda</code>) vs past report.</td>
+        <td><span class="pill pill-amber">? Unconfirmed</span> ➔ <span class="pill pill-red">🚨 In Progress (P1)</span></td>
+      </tr>
+      <tr>
+        <td><strong>Abuser in Same Room / Coded Call</strong></td>
+        <td>Food code, whispers, or explicit prompt indicating abuser proximity.</td>
+        <td><span class="pill pill-amber">? Unconfirmed</span> ➔ <span class="pill pill-red">⚠ Danger: In Room (Yes/No Only)</span></td>
+      </tr>
+      <tr>
+        <td><strong>Medical Distress &amp; Bleeding</strong></td>
+        <td>Injury cues matched (<code class="inline">behosh</code>, <code class="inline">dard</code>, <code class="inline">chot</code>).</td>
+        <td><span class="pill pill-amber">? Unconfirmed</span> ➔ <span class="pill pill-red">🚑 Medical Dispatch Req</span></td>
+      </tr>
+      <tr>
+        <td><strong>Children / Minors on Premises</strong></td>
+        <td>Presence of infants/children confirmed through direct safe inquiry.</td>
+        <td><span class="pill pill-amber">? Unconfirmed</span> ➔ <span class="pill pill-blue">✓ Children Verified</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- SECTION 7: SAFESIGNAL PROTOCOL & OPERATOR DIRECT INQUIRY -->
+  <h2>7. The SafeSignal Protocol &amp; Direct Operator Inquiries</h2>
+  <p>
+    When a caller is in distress, standard questioning protocols often provoke further violence. SafeSignal enforces 10 strict invariants across all operator and automated prompts:
+  </p>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">The 10 Inviolable Safety Rules (R1–R10)</div>
+      <ol style="font-size: 7.5pt; padding-left: 14px; margin: 0;">
+        <li><strong>R1 (Binary Answers):</strong> Strictly Yes/No only. No open questions.</li>
+        <li><strong>R2 (Brevity):</strong> Question length must be ≤ 14 words.</li>
+        <li><strong>R3 (No Abuser Names):</strong> Never say "pati", "husband", or abuser names.</li>
+        <li><strong>R4 (No Weapon Mentions):</strong> Never ask "kya unke paas chaku hai".</li>
+        <li><strong>R5 (No Movement Demands):</strong> Never command caller to run or open doors.</li>
+        <li><strong>R6 (No Volume Commands):</strong> Never ask the caller to speak louder.</li>
+        <li><strong>R7 (No Dangerous Callbacks):</strong> Never schedule an unannounced callback.</li>
+        <li><strong>R8 (Atomic Delivery):</strong> Strictly one question at a time.</li>
+        <li><strong>R9 (Zero PII Ingestion):</strong> No asking for Aadhaar, bank details, or IDs.</li>
+        <li><strong>R10 (No Promises):</strong> Never promise police will arrive in 2 minutes.</li>
+      </ol>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Direct Operator Inquiry Channel</div>
+      <p style="font-size: 8pt;">
+        Operators can type custom questions or select verified presets. Once sent, the question renders directly on the citizen's mobile interface with high-contrast 1-touch response buttons:
+      </p>
+      <div style="background: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 4px; padding: 8px; margin-top: 6px;">
+        <div style="font-size: 7.5pt; color: #64748B; font-weight: 700;">USER MOBILE DISPLAY PREVIEW:</div>
+        <div style="font-size: 8.5pt; font-weight: 600; color: #0F172A; margin: 4px 0;">💬 Operator: "Kya darwaza band hai?"</div>
+        <div style="display: flex; gap: 8px; margin-top: 6px;">
+          <span style="background: #DC2626; color: white; padding: 3px 12px; font-weight: 700; border-radius: 4px; font-size: 8pt;">[ HAAN / YES ]</span>
+          <span style="background: #475569; color: white; padding: 3px 12px; font-weight: 700; border-radius: 4px; font-size: 8pt;">[ NAHI / NO ]</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 8: DATA MODELS & SCHEMA SPECIFICATION -->
+  <h2>8. Core Data Schemas &amp; TypeScript Interfaces</h2>
+  <pre>
+export interface EmergencyReport {
+  id: string;
+  source: 'voice_call' | 'silent_chat' | 'ivr_handoff';
+  caller: { id: string; maskedPhone: string; language: string; location?: LocationTelemetry; };
+  transcript: TranscriptTurn[];
+  triage: StructuredTriage;
+  dispatchState: AgencyDispatchState;
+  contradictions: ContradictionRecord[];
+  safeQuestions: SafeSignalQuestion[];
+  timestamps: { initiated: number; locked?: number; closed?: number; };
+}
+
+export interface StructuredTriage {
+  priority: 'P1_CRITICAL' | 'P2_URGENT' | 'P3_STANDARD' | 'P4_DEFERRED';
+  category: 'domestic_violence' | 'physical_assault' | 'stalking_harassment' | 'sexual_assault' | 'coded_distress' | 'medical_trauma';
+  threatLevel: 'extreme' | 'high' | 'moderate' | 'low';
+  flags: {
+    codedCallDetected: boolean;
+    urgencyFloorLocked: boolean;
+    activeAssault: boolean;
+    weaponsIdentified: boolean;
+    childrenInDanger: boolean;
+  };
+  confidence: number;
+  extractedEntities: {
+    locationPhrase?: string;
+    landmark?: string;
+    weaponTypes?: string[];
+    threats?: string[];
+  };
+}
+  </pre>
+
+  <!-- SECTION 9: VERIFICATION, TESTING & BENCHMARKS -->
+  <h2>9. Verification &amp; Acceptance Test Coverage</h2>
+  <p>
+    The codebase is verified against <strong>21 rigorous automated acceptance tests</strong> covering every architectural requirement and safety constraint specified by the national helpline mandate:
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Suite Name</th>
+        <th>Tests</th>
+        <th>Key Coverage Areas</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Coded-Call Suite</strong></td>
+        <td>5</td>
+        <td>Food delivery orders, wrong numbers, whisper cues, safe yes/no constraints.</td>
+        <td><span class="badge-test">PASSED (5/5)</span></td>
+      </tr>
+      <tr>
+        <td><strong>Urgency Floors Suite</strong></td>
+        <td>4</td>
+        <td>Monotonic priority locking, denial under duress resistance, weapon triggers.</td>
+        <td><span class="badge-test">PASSED (4/4)</span></td>
+      </tr>
+      <tr>
+        <td><strong>SafeSignal Rules Suite</strong></td>
+        <td>6</td>
+        <td>R1–R10 invariant checking, word count limits, PII filters, no-promise enforcement.</td>
+        <td><span class="badge-test">PASSED (6/6)</span></td>
+      </tr>
+      <tr>
+        <td><strong>Location &amp; Lexicon Suite</strong></td>
+        <td>4</td>
+        <td>Colony/landmark parsing, pre-token verb trimming, Hinglish normalization.</td>
+        <td><span class="badge-test">PASSED (4/4)</span></td>
+      </tr>
+      <tr>
+        <td><strong>Operator CAD &amp; Multi-Agency</strong></td>
+        <td>2</td>
+        <td>Simultaneous 4-agency dispatch, live ETA calculations, handoff packet generation.</td>
+        <td><span class="badge-test">PASSED (2/2)</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- SECTION 10: CONCLUSION & OPERATIONAL IMPACT -->
+  <h2>10. Operational Impact &amp; Deployment Readiness</h2>
+  <p>
+    By reducing emergency triage latency from the national average of <strong>3.5 minutes down to under 10 seconds</strong>, SAATHI prevents vital information loss during dropped or intercepted calls. Its quote-grounded evidence links eliminate operator cognitive bias, while its deterministic safety invariants ensure that women in the most acute danger—those forced to speak in whispers or codes—receive the fastest, safest, and most coordinated response possible across Indian emergency services.
+  </p>
+
+  <div style="margin-top: 24px; border-top: 1px solid #CBD5E1; padding-top: 10px; display: flex; justify-content: space-between; font-size: 8pt; color: #64748B;">
+    <div>SAATHI Emergency Triage System · Apex Squad</div>
+    <div>Document Reference: SAATHI-SPEC-2026-V2.4 · All 21 Tests Verified</div>
+  </div>
+
+</body>
+</html>

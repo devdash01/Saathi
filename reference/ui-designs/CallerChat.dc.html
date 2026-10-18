@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SAATHI silent chat</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@500;600&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#1D5C96}a:hover{color:#123E66}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #F3F5F7; color: #1B2229; font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif; display: flex; flex-direction: column; overflow: hidden">
+  <div style="background: #17212B; color: #EEF2F5; padding: 18px 20px; display: flex; align-items: center; gap: 12px">
+    <a href="CallerHome.dc.html" aria-label="Back" style="color: #FFFFFF; display: grid; place-items: center; width: 32px; height: 32px"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg></a>
+    <div style="display: flex; flex-direction: column; flex: 1">
+      <b style="font-size: 16px">181 · Silent chat</b>
+      <span style="font-size: 12.5px; color: #8FD3A3; display: inline-flex; align-items: center; gap: 6px"><span style="width: 7px; height: 7px; border-radius: 50%; background: #4CC06C"></span>OP-07 is reading</span>
+    </div>
+    <a href="#" style="text-decoration: none; color: #FFFFFF; border: 1.5px solid #E76F66; border-radius: 20px; padding: 6px 12px; font-size: 12.5px; font-weight: 600">Quick exit</a>
+  </div>
+  <div style="background: #E3EDF7; color: #1D5C96; font-size: 12.5px; padding: 8px 20px; display: flex; gap: 8px; align-items: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1D5C96" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M11 5L6 9H2v6h4l5 4V5z"></path><path d="M23 9l-6 6M17 9l6 6"></path></svg>No sound, no vibration. Messages hide when you exit.</div>
+
+  <div style="flex: 1; padding: 16px 16px 10px; display: flex; flex-direction: column; gap: 8px; overflow: hidden">
+    <span style="align-self: center; font-size: 11.5px; color: #5A6570; font-family: 'IBM Plex Mono', monospace">Today 09:42</span>
+    <div style="align-self: flex-end; max-width: 78%; background: #1D5C96; color: #FFFFFF; border-radius: 16px 16px 4px 16px; padding: 10px 14px; font-size: 15px; line-height: 1.4">Bol nahi sakti. Woh ghar ke bahar hai.</div>
+    <div style="align-self: flex-end; max-width: 78%; background: #1D5C96; color: #FFFFFF; border-radius: 16px 16px 4px 16px; padding: 10px 14px; font-size: 15px; line-height: 1.4">Bachcha saath hai.</div>
+    <span style="align-self: flex-end; font-size: 11px; color: #5A6570">Read 09:42</span>
+    <div style="align-self: flex-start; max-width: 82%; background: #FFFFFF; border: 1px solid #CDD4DB; border-radius: 16px 16px 16px 4px; padding: 10px 14px; font-size: 15px; line-height: 1.4">Main aapke saath hoon. Bas haan ya nahi mein jawab dijiye.</div>
+    <div style="align-self: flex-start; max-width: 82%; background: #FFFFFF; border: 1px solid #CDD4DB; border-radius: 16px 16px 16px 4px; padding: 10px 14px; font-size: 15px; line-height: 1.4; font-weight: 600">Kya aap abhi kisi khatre mein hain?</div>
+    <span style="align-self: flex-start; font-size: 11px; color: #5A6570">Operator · 09:43</span>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 4px">
+      <button style="font: inherit; font-size: 18px; font-weight: 700; background: #B3261E; color: #FFFFFF; border: 0; border-radius: 12px; min-height: 56px">Haan</button>
+      <button style="font: inherit; font-size: 18px; font-weight: 700; background: #FFFFFF; color: #1B2229; border: 1.5px solid #1B2229; border-radius: 12px; min-height: 56px">Nahi</button>
+    </div>
+  </div>
+
+  <div style="padding: 0 16px 10px; display: flex; gap: 8px; flex-wrap: wrap">
+    <button style="font: inherit; font-size: 13px; background: #FFFFFF; border: 1px solid #CDD4DB; border-radius: 18px; padding: 7px 12px; min-height: 36px">Can't talk</button>
+    <button style="font: inherit; font-size: 13px; background: #FFFFFF; border: 1px solid #CDD4DB; border-radius: 18px; padding: 7px 12px; min-height: 36px">He is here</button>
+    <button style="font: inherit; font-size: 13px; background: #FFFFFF; border: 1px solid #CDD4DB; border-radius: 18px; padding: 7px 12px; min-height: 36px">Need ambulance</button>
+    <button style="font: inherit; font-size: 13px; background: #FFFFFF; border: 1px solid #CDD4DB; border-radius: 18px; padding: 7px 12px; min-height: 36px">Share my area</button>
+  </div>
+  <div style="padding: 10px 16px 18px; background: #FFFFFF; border-top: 1px solid #DDE2E7; display: flex; gap: 10px; align-items: center">
+    <label for="msg" style="position: absolute; left: -9999px">Message</label>
+    <input id="msg" placeholder="Type a message" style="flex: 1; min-width: 0; font: inherit; font-size: 15px; border: 1px solid #CDD4DB; border-radius: 22px; padding: 11px 16px">
+    <button aria-label="Send" style="width: 46px; height: 46px; border-radius: 50%; border: 0; background: #1D5C96; display: grid; place-items: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg></button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

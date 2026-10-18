@@ -1,0 +1,39 @@
+{
+  "name": "saathi",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "test": "node test_safety_suite.cjs",
+    "lint": "oxlint",
+    "preview": "vite preview",
+    "cap:sync": "npm run build && npx cap sync android",
+    "cap:copy": "npm run build && npx cap copy android",
+    "cap:open": "npx cap open android",
+    "cap:run": "npx cap run android",
+    "deploy:web": "npm run build && npx vercel",
+    "deploy:prod": "npm run build && npx vercel --prod"
+  },
+  "dependencies": {
+    "@capacitor/core": "^8.5.3",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^1.59.0",
+    "mqtt": "^5.16.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/cli": "^8.5.3",
+    "@types/leaflet": "^1.9.22",
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "oxlint": "^1.81.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.3.0"
+  }
+}
