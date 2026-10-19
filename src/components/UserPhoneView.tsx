@@ -14,7 +14,7 @@ import {
   MapPin,
   Radio
 } from 'lucide-react';
-import { speechService } from '../services/speechRecognitionService';
+import { speechService, cleanDuplicateSpeech } from '../services/speechRecognitionService';
 import { transcribeAudioWithSarvam, MicrophoneRecorder } from '../services/sarvamService';
 import { TacticalEmergencyMap } from './TacticalEmergencyMap';
 import { deviceLocationService } from '../services/deviceLocationService';
@@ -159,9 +159,21 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
 
     const started = speechService.start(
       (result) => {
-        const spoken = result.transcript;
+        const spoken = cleanDuplicateSpeech(result.transcript);
         const formatted = isWhisperMode && !spoken.includes('[whisper]') ? `[whisper] ${spoken}` : spoken;
-        const accumulated = baseText ? `${baseText}. ${formatted}` : formatted;
+
+        let accumulated: string;
+        if (!baseText) {
+          accumulated = formatted;
+        } else if (formatted.toLowerCase().startsWith(baseText.toLowerCase())) {
+          accumulated = formatted;
+        } else if (baseText.toLowerCase().endsWith(formatted.toLowerCase())) {
+          accumulated = baseText;
+        } else {
+          accumulated = `${baseText} ${formatted}`;
+        }
+        accumulated = cleanDuplicateSpeech(accumulated);
+
         setTranscript(accumulated);
         transcriptRef.current = accumulated;
         onUserInputChange(accumulated);
@@ -169,7 +181,7 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
 
         if (spoken.trim()) {
           const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          const newText = `🎤 ${formatted}`;
+          const newText = `🎤 ${cleanDuplicateSpeech(formatted)}`;
           setMessages((prev) => {
             const existingIdx = prev.findIndex((m: any) => m.id === voiceMsgId);
             if (existingIdx >= 0) {
