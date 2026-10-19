@@ -62,6 +62,69 @@ export function cleanDuplicateSpeech(text: string): string {
   return finalWords.join(' ').replace(/\s+([.,!?])/g, '$1').trim();
 }
 
+/**
+ * Intelligent Speech Segment Assembler:
+ * Merges streaming recognition chunks and handles Android Chrome bugs:
+ * - Duplicate results
+ * - Cumulative superset strings
+ * - Overlapping boundaries
+ * - Distinct phrases
+ */
+export function assembleSpeechResults(resultsList: string[]): string {
+  const norm = (s: string) => (s || '').toLowerCase().replace(/[^\w\u0900-\u097F\s]/g, '').replace(/\s+/g, ' ').trim();
+  const stripWord = (w: string) => (w || '').toLowerCase().replace(/^[^\w\u0900-\u097F]+|[^\w\u0900-\u097F]+$/g, '');
+
+  const segments: string[] = [];
+  for (let i = 0; i < resultsList.length; i++) {
+    const chunk = (resultsList[i] || '').trim();
+    if (!chunk) continue;
+    const normChunk = norm(chunk);
+    if (!normChunk) continue;
+
+    if (segments.length === 0) {
+      segments.push(chunk);
+    } else {
+      const prev = segments[segments.length - 1];
+      const normPrev = norm(prev);
+
+      // Case 1: Exact duplicate (ignoring punctuation & case)
+      if (normChunk === normPrev) {
+        continue;
+      }
+
+      // Case 2: chunk starts with prev (chunk is cumulative superset of prev!)
+      if (normChunk.startsWith(normPrev)) {
+        segments[segments.length - 1] = chunk;
+        continue;
+      }
+
+      // Case 3: prev already includes or ends with chunk
+      if (normPrev.endsWith(normChunk) || normPrev.includes(normChunk)) {
+        continue;
+      }
+
+      // Case 4: Overlap at boundary (comparing normalized words)
+      const prevWords = prev.split(/\s+/);
+      const chunkWords = chunk.split(/\s+/);
+      let overlap = 0;
+      for (let k = Math.min(prevWords.length, chunkWords.length); k > 0; k--) {
+        const pEnd = prevWords.slice(-k).map(stripWord).join(' ');
+        const cStart = chunkWords.slice(0, k).map(stripWord).join(' ');
+        if (pEnd === cStart) {
+          overlap = k;
+          break;
+        }
+      }
+      if (overlap > 0) {
+        segments[segments.length - 1] = prev + ' ' + chunkWords.slice(overlap).join(' ');
+      } else {
+        segments.push(chunk);
+      }
+    }
+  }
+  return segments.join(' ').trim();
+}
+
 interface IWindowWithSpeech extends Window {
   SpeechRecognition?: any;
   webkitSpeechRecognition?: any;
@@ -87,45 +150,16 @@ export class BrowserSpeechRecognitionService {
         this.recognition.lang = this.currentLanguage;
 
         this.recognition.onresult = (event: any) => {
-          let final = '';
-          let interim = '';
-
+          const rawChunks: string[] = [];
           for (let i = 0; i < event.results.length; ++i) {
             const res = event.results[i];
             if (!res || !res[0]) continue;
-            const text = (res[0].transcript || '').trim();
-            if (!text) continue;
-            if (res.isFinal) {
-              final += (final ? ' ' : '') + text;
-            } else {
-              interim += (interim ? ' ' : '') + text;
-            }
+            const t = (res[0].transcript || '').trim();
+            if (t) rawChunks.push(t);
           }
 
-          let combined = '';
-          if (final && interim) {
-            // Deduplicate boundary if interim starts with final or part of final
-            const fWords = final.split(/\s+/);
-            const iWords = interim.split(/\s+/);
-            let overlap = 0;
-            for (let k = Math.min(fWords.length, iWords.length); k > 0; k--) {
-              const fEnd = fWords.slice(-k).join(' ').toLowerCase();
-              const iStart = iWords.slice(0, k).join(' ').toLowerCase();
-              if (fEnd === iStart) {
-                overlap = k;
-                break;
-              }
-            }
-            if (overlap > 0) {
-              combined = final + ' ' + iWords.slice(overlap).join(' ');
-            } else {
-              combined = final + ' ' + interim;
-            }
-          } else {
-            combined = final || interim;
-          }
-
-          const cleaned = cleanDuplicateSpeech(combined);
+          const assembled = assembleSpeechResults(rawChunks);
+          const cleaned = cleanDuplicateSpeech(assembled);
 
           const lastResult = event.results[event.results.length - 1];
           const isFinal = Boolean(lastResult && lastResult.isFinal);

@@ -30,8 +30,8 @@
   --font-mono: 'JetBrains Mono', monospace;
 
   /* Native Mobile Safe Area Insets (Android Status Bar & 3-Button Navigation Bar) */
-  --safe-top: max(env(safe-area-inset-top, 0px), 40px);
-  --safe-bottom: max(env(safe-area-inset-bottom, 0px), 36px);
+  --safe-top: max(env(safe-area-inset-top, 0px), 48px);
+  --safe-bottom: max(env(safe-area-inset-bottom, 0px), 54px);
 }
 
 * {

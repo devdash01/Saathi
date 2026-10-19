@@ -14,7 +14,7 @@ import {
   MapPin,
   Radio
 } from 'lucide-react';
-import { speechService, cleanDuplicateSpeech } from '../services/speechRecognitionService';
+import { speechService, cleanDuplicateSpeech, assembleSpeechResults } from '../services/speechRecognitionService';
 import { transcribeAudioWithSarvam, MicrophoneRecorder } from '../services/sarvamService';
 import { TacticalEmergencyMap } from './TacticalEmergencyMap';
 import { deviceLocationService } from '../services/deviceLocationService';
@@ -167,30 +167,10 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
         const formatted = isWhisperMode && !spoken.includes('[whisper]') ? `[whisper] ${spoken}` : spoken;
 
         let accumulated: string;
-        if (!baseText) {
-          accumulated = formatted;
-        } else if (formatted.toLowerCase().startsWith(baseText.toLowerCase())) {
-          accumulated = formatted;
-        } else if (baseText.toLowerCase().includes(formatted.toLowerCase())) {
-          accumulated = baseText;
+        if (baseText) {
+          accumulated = assembleSpeechResults([baseText, formatted]);
         } else {
-          // Check overlap between end of baseText and start of formatted
-          const baseWords = baseText.split(/\s+/);
-          const spokenWords = formatted.split(/\s+/);
-          let overlap = 0;
-          for (let k = Math.min(baseWords.length, spokenWords.length); k > 0; k--) {
-            const bEnd = baseWords.slice(-k).join(' ').toLowerCase();
-            const sStart = spokenWords.slice(0, k).join(' ').toLowerCase();
-            if (bEnd === sStart) {
-              overlap = k;
-              break;
-            }
-          }
-          if (overlap > 0) {
-            accumulated = `${baseText} ${spokenWords.slice(overlap).join(' ')}`;
-          } else {
-            accumulated = `${baseText}. ${formatted}`;
-          }
+          accumulated = formatted;
         }
         accumulated = cleanDuplicateSpeech(accumulated);
 
@@ -271,8 +251,8 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
         const url = URL.createObjectURL(blob);
         transcribeAudioWithSarvam(blob, 'codemix').then((res) => {
           if (res.transcript) {
-            const baseText = transcriptRef.current ? transcriptRef.current.trim() : '';
-            const accumulated = baseText ? `${baseText}. ${res.transcript}` : res.transcript;
+            const baseText = transcriptRef.current ? cleanDuplicateSpeech(transcriptRef.current.trim()) : '';
+            const accumulated = cleanDuplicateSpeech(baseText ? assembleSpeechResults([baseText, res.transcript]) : res.transcript);
             setTranscript(accumulated);
             transcriptRef.current = accumulated;
             onUserInputChange(accumulated, undefined, url);
@@ -332,10 +312,8 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
     let updated: string;
     if (!currentT) {
       updated = val;
-    } else if (currentT.toLowerCase().endsWith(val.toLowerCase()) || currentT.toLowerCase().includes(val.toLowerCase())) {
-      updated = currentT;
     } else {
-      updated = `${currentT}. ${val}`;
+      updated = assembleSpeechResults([currentT, val]);
     }
     updated = cleanDuplicateSpeech(updated);
 
@@ -365,7 +343,7 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
           { sender: 'user', text: locMsg, time: timeNow }
         ]);
         const locSnippet = `[Live GPS Shared: ${loc.coords[0].toFixed(4)}, ${loc.coords[1].toFixed(4)}]`;
-        const updated = transcript ? `${transcript}. ${locSnippet}` : locSnippet;
+        const updated = transcript ? (transcript.includes(locSnippet) ? transcript : `${transcript}. ${locSnippet}`) : locSnippet;
         setTranscript(updated);
         transcriptRef.current = updated;
         onUserInputChange(updated);
@@ -1103,7 +1081,7 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
                             ...prev,
                             { sender: 'user', text: chip, time: timeNow }
                           ]);
-                          const updated = transcript ? `${transcript}. ${chip}` : chip;
+                          const updated = cleanDuplicateSpeech(transcript ? assembleSpeechResults([transcript, chip]) : chip);
                           setTranscript(updated);
                           transcriptRef.current = updated;
                           onUserInputChange(updated);
