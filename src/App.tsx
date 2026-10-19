@@ -178,7 +178,14 @@ export function App() {
   // 3. Handle live user phone input (Voice recording, Presets, Direct typing, Audio upload)
   // FULLY REAL-TIME & SYNCHRONOUS: Updates map, questions, and CAD immediately in 0ms!
   const handleUserPhoneInput = useCallback(
-    (text: string, contextHint?: string, audioUrl?: string, isRemoteSync: boolean = false) => {
+    (
+      text: string,
+      contextHint?: string,
+      audioUrl?: string,
+      isRemoteSync: boolean = false,
+      remoteLocation?: EmergencyReport['location'],
+      remoteNearbyServices?: EmergencyServiceEntity[]
+    ) => {
       if (!text || text.trim().length === 0) return;
 
       // A. Instantly extract locality & resolve coordinates + nearby services (0ms synchronous)
@@ -187,7 +194,16 @@ export function App() {
       let coords: [number, number];
       let resolvedAddress: string;
 
-      if (loc.isFound) {
+      if (remoteLocation && remoteLocation.coords && remoteLocation.coords.length === 2) {
+        coords = remoteLocation.coords;
+        resolvedAddress = remoteLocation.address || loc.locality;
+        if (remoteNearbyServices && remoteNearbyServices.length > 0) {
+          setNearbyServices(remoteNearbyServices);
+        } else {
+          const nearby = getNearbyServicesForCoordinates(coords[0], coords[1], resolvedAddress);
+          setNearbyServices(nearby);
+        }
+      } else if (loc.isFound) {
         coords = [instantGeo.lat, instantGeo.lon];
         resolvedAddress = loc.locality;
         setNearbyServices(instantGeo.nearbyServices);
@@ -293,7 +309,8 @@ export function App() {
           contextHint,
           audioUrl,
           callerAnswers,
-          location: updatedReport.location
+          location: updatedReport.location,
+          nearbyServices: instantGeo.nearbyServices
         });
       }
 
@@ -338,9 +355,11 @@ export function App() {
   const handleManualLandmarkEntered = async (landmark: string) => {
     setLocationError(undefined);
     const locResult = deviceLocationService.setManualLandmark(landmark);
+    let nearby = getInstantNearbyServices(landmark).nearbyServices;
 
     try {
       const geo = await geocodeAndFetchNearbyServices(landmark);
+      nearby = geo.nearbyServices;
       setNearbyServices(geo.nearbyServices);
       locResult.coords = [geo.lat, geo.lon];
     } catch (err) {
@@ -373,6 +392,15 @@ export function App() {
     await reportStorageService.saveReportLocally(updated);
     setDispatchAlertToast(`Landmark updated to: "${landmark}"`);
     setTimeout(() => setDispatchAlertToast(null), 3500);
+
+    // Broadcast location update over cloud sync
+    cloudSyncService.broadcast('phone', 'LOCATION_UPDATE', {
+      coords: locResult.coords,
+      address: landmark,
+      accuracy: 40,
+      isLiveStreaming: false,
+      nearbyServices: nearby
+    });
   };
 
   // 4b. Live GPS Telemetry Fix Acquired
@@ -417,6 +445,15 @@ export function App() {
     await reportStorageService.saveReportLocally(updated);
     setDispatchAlertToast(`Live GPS Acquired: ${resolvedAddress} (±${accuracy}m)`);
     setTimeout(() => setDispatchAlertToast(null), 3500);
+
+    // CRITICAL: Broadcast real-time GPS telemetry to the Operator CAD console!
+    cloudSyncService.broadcast('phone', 'LOCATION_UPDATE', {
+      isLiveStreaming: true,
+      coords: coords,
+      address: resolvedAddress,
+      accuracy: accuracy,
+      nearbyServices: nearby
+    });
   };
 
   // 5. Operator Acknowledges Report
@@ -793,9 +830,24 @@ export function App() {
     const unsubEvents = cloudSyncService.subscribeEvents((evt: CloudSyncEvent) => {
       startTransition(() => {
         if (evt.type === 'CALLER_INPUT') {
-          const { text, contextHint, audioUrl } = evt.payload;
+          const { text, contextHint, audioUrl, location: remoteLoc, nearbyServices: remoteNearby } = evt.payload;
           if (text) {
-            handleUserPhoneInput(text, contextHint, audioUrl, true /* isRemoteSync */);
+            handleUserPhoneInput(text, contextHint, audioUrl, true /* isRemoteSync */, remoteLoc, remoteNearby);
+            if (remoteLoc && remoteLoc.coords) {
+              setActiveReport((prev) => ({
+                ...prev,
+                location: {
+                  ...prev.location,
+                  coords: remoteLoc.coords,
+                  address: remoteLoc.address || prev.location.address,
+                  source: remoteLoc.source || 'live_gps',
+                  isLiveStreaming: true
+                }
+              }));
+              if (remoteNearby && remoteNearby.length > 0) {
+                setNearbyServices(remoteNearby);
+              }
+            }
             setDispatchAlertToast(`[Cloud Sync] Incoming distress from mobile device #${evt.channelId}`);
             setTimeout(() => setDispatchAlertToast(null), 4000);
           }
@@ -805,17 +857,26 @@ export function App() {
             handleCallerAnswer(questionId, answer, true /* isRemoteSync */);
           }
         } else if (evt.type === 'LOCATION_UPDATE') {
-          const { coords, address, isLiveStreaming } = evt.payload;
-          setActiveReport((prev) => ({
-            ...prev,
-            location: {
-              ...prev.location,
-              coords: coords || prev.location.coords,
-              address: address || prev.location.address,
-              isLiveStreaming: isLiveStreaming !== undefined ? isLiveStreaming : prev.location.isLiveStreaming,
-              lastUpdated: new Date().toISOString()
-            }
-          }));
+          const { coords, address, isLiveStreaming, nearbyServices: remoteNearby } = evt.payload;
+          if (coords && coords.length === 2) {
+            const nearby = (remoteNearby && remoteNearby.length > 0)
+              ? remoteNearby
+              : getNearbyServicesForCoordinates(coords[0], coords[1], address || '');
+            setNearbyServices(nearby);
+            setActiveReport((prev) => ({
+              ...prev,
+              location: {
+                ...prev.location,
+                coords: coords,
+                address: address || prev.location.address,
+                isLiveStreaming: isLiveStreaming !== undefined ? isLiveStreaming : true,
+                source: 'live_gps',
+                lastUpdated: new Date().toISOString()
+              }
+            }));
+            setDispatchAlertToast(`[Live GPS Telemetry] Mobile GPS synced: ${address || `${coords[0].toFixed(4)}, ${coords[1].toFixed(4)}`}`);
+            setTimeout(() => setDispatchAlertToast(null), 4000);
+          }
         } else if (evt.type === 'OPERATOR_ACKNOWLEDGE') {
           const { operatorName } = evt.payload;
           setActiveReport((prev) => ({
@@ -1173,6 +1234,7 @@ export function App() {
               onApproveQuestion={handleApproveQuestion}
               onSendToCaller={handleSendToCaller}
               onSendCustomQuestion={handleSendCustomQuestion}
+              onUpdateLocation={handleManualLandmarkEntered}
               onApplySimulation={(newTriage, newAgencies) => {
                 setActiveReport((prev) => ({
                   ...prev,

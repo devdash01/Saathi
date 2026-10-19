@@ -149,6 +149,23 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
     }
   }, [currentInputText]);
 
+  // Auto-acquire real device GPS on mount and stream fix to CAD
+  useEffect(() => {
+    deviceLocationService.acquireGpsFix().then((loc) => {
+      if ((loc.source === 'live_gps' || loc.source === 'gps_cached') && loc.coords) {
+        setIsAreaShared(true);
+        if (onToggleLiveLocationSharing) {
+          onToggleLiveLocationSharing(true);
+        }
+        if (onGpsLocationAcquired) {
+          onGpsLocationAcquired(loc.coords, loc.accuracyMeters, loc.address);
+        }
+      }
+    }).catch(() => {
+      // Non-blocking fallback
+    });
+  }, [onGpsLocationAcquired, onToggleLiveLocationSharing]);
+
   // Reference for single active voice message bubble to prevent duplicate messages
   const currentVoiceMessageIdRef = useRef<string | null>(null);
 

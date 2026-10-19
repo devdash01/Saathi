@@ -57,6 +57,7 @@ interface OperatorCadProps {
   onAppendInput?: (newStatement: string) => void;
   operatorSession: OperatorSession;
   aiConfidence?: { score: number; isUncertain: boolean; rationale: string };
+  onUpdateLocation?: (loc: string) => void;
 }
 
 export const OperatorCadView: React.FC<OperatorCadProps> = ({
@@ -79,7 +80,8 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
   onCallerAnswer,
   onAppendInput,
   operatorSession: _operatorSession,
-  aiConfidence: _aiConfidence
+  aiConfidence: _aiConfidence,
+  onUpdateLocation
 }) => {
   // 4 Top Navigation Tabs matching Pages 6 - 9
   const [activeTab, setActiveTab] = useState<OperatorCadTab>('console');
@@ -1118,6 +1120,12 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
                   type="text"
                   value={locationInput}
                   onChange={(e) => setLocationInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && locationInput.trim()) {
+                      setIsLocationConfirmed(true);
+                      if (onUpdateLocation) onUpdateLocation(locationInput.trim());
+                    }
+                  }}
                   placeholder="Area, gali, landmark"
                   style={{
                     flex: 1,
@@ -1130,7 +1138,12 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
                   }}
                 />
                 <button
-                  onClick={() => setIsLocationConfirmed(true)}
+                  onClick={() => {
+                    if (locationInput.trim()) {
+                      setIsLocationConfirmed(true);
+                      if (onUpdateLocation) onUpdateLocation(locationInput.trim());
+                    }
+                  }}
                   style={{
                     background: '#2563eb',
                     border: 'none',
