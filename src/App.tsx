@@ -148,6 +148,15 @@ export function App() {
     };
   }, []);
 
+  // Switch view to citizen phone interface on hardware emergency trigger
+  useEffect(() => {
+    const handleHwTrigger = () => {
+      setViewMode((prev) => (prev === 'cad' ? 'phone' : prev));
+    };
+    window.addEventListener('saathi:hardware-mic-trigger', handleHwTrigger);
+    return () => window.removeEventListener('saathi:hardware-mic-trigger', handleHwTrigger);
+  }, []);
+
   // 2. Initial Location Geocoding & GPS Acquisition
   useEffect(() => {
     // Acquire real GPS if supported

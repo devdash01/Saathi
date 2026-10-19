@@ -91,6 +91,7 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
   const [isAreaShared, setIsAreaShared] = useState(false);
   const [isLocatingGps, setIsLocatingGps] = useState(false);
   const effectiveAreaShared = isAreaShared || Boolean(isLiveLocationSharing);
+  const [hardwareTriggerToast, setHardwareTriggerToast] = useState<string | null>(null);
 
   // Page 4 Confirmation input
   const [landmarkInput, setLandmarkInput] = useState('');
@@ -319,6 +320,78 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
     }
   };
 
+  // Hardware shortcut: Double-press Volume Up & Down together opens microphone instantly
+  useEffect(() => {
+    let lastArrowUp = 0;
+    let lastArrowDown = 0;
+    let lastVPress = 0;
+    let vCount = 0;
+
+    const activateMicInstantly = () => {
+      // 1. Ensure active call/input screen is visible
+      setActiveScreen('call');
+
+      // 2. Immediate tactile buzz feedback on mobile devices
+      try {
+        if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+          navigator.vibrate([70]);
+        }
+      } catch (_e) {}
+
+      // 3. Open and engage microphone recognition instantly
+      startLiveVoiceRecognition();
+
+      // 4. Display high-visibility confirmation toast
+      setHardwareTriggerToast('🎙️ Hardware Trigger: Mic activated! Speak now...');
+      setTimeout(() => {
+        setHardwareTriggerToast(null);
+      }, 3500);
+    };
+
+    const handleHardwareTrigger = () => {
+      activateMicInstantly();
+    };
+
+    // Keyboard fallbacks for web/desktop testing: Arrow Up + Down chord, or double press 'V'
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isTyping = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+      if (isTyping) return;
+
+      const now = Date.now();
+      if (e.key === 'ArrowUp') {
+        lastArrowUp = now;
+        if (now - lastArrowDown < 500) {
+          activateMicInstantly();
+        }
+      } else if (e.key === 'ArrowDown') {
+        lastArrowDown = now;
+        if (now - lastArrowUp < 500) {
+          activateMicInstantly();
+        }
+      } else if (e.key.toLowerCase() === 'v') {
+        if (now - lastVPress < 500) {
+          vCount++;
+          if (vCount >= 2) {
+            activateMicInstantly();
+            vCount = 0;
+          }
+        } else {
+          vCount = 1;
+        }
+        lastVPress = now;
+      }
+    };
+
+    window.addEventListener('saathi:hardware-mic-trigger', handleHardwareTrigger);
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('saathi:hardware-mic-trigger', handleHardwareTrigger);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [startLiveVoiceRecognition]);
+
   const handleStartNewSessionClick = () => {
     stopLiveVoiceRecognition();
     setTranscript('');
@@ -450,6 +523,31 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
 
   return (
     <div className="citizen-native-app">
+      {hardwareTriggerToast && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 'calc(var(--safe-top, 48px) + 8px)',
+            left: '16px',
+            right: '16px',
+            zIndex: 99999,
+            background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+            color: '#ffffff',
+            padding: '10px 14px',
+            borderRadius: '12px',
+            boxShadow: '0 8px 24px rgba(5, 150, 105, 0.45), 0 2px 6px rgba(0,0,0,0.3)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            fontWeight: 700,
+            fontSize: '0.82rem',
+            animation: 'fadeIn 0.25s ease-out'
+          }}
+        >
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#34d399', boxShadow: '0 0 8px #34d399' }} />
+          <span>{hardwareTriggerToast}</span>
+        </div>
+      )}
           {/* ======================================================== */}
           {/* PAGE 1: CITIZEN LANDING SCREEN (You are not alone)       */}
           {/* ======================================================== */}
@@ -578,6 +676,23 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
                     <div style={{ fontSize: '0.72rem', color: '#fecaca' }}>Speak into your microphone in Hindi or Hinglish</div>
                   </div>
                 </button>
+
+                {/* Hardware Shortcut Info Badge */}
+                <div style={{
+                  background: '#ffffff',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '10px',
+                  padding: '7px 11px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontSize: '0.68rem',
+                  color: '#475569',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+                }}>
+                  <span style={{ fontSize: '0.85rem' }}>⚡</span>
+                  <span><strong>Instant Mic Shortcut:</strong> Double-press <strong>Volume Up &amp; Down</strong> buttons together anytime to speak immediately.</span>
+                </div>
 
                 {/* 1. Call 181 Card */}
                 <button onClick={() => { setActiveScreen('call'); setCallSeconds(0); }} className="call-181-card">
