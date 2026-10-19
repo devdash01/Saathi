@@ -11,7 +11,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
  * Once compiled with this URL, any time you push new design/code changes to Vercel,
  * the APK automatically loads the newest version on launch over mobile data or Wi-Fi!
  */
-const LIVE_URL = process.env.CAPACITOR_SERVER_URL || '';
+const LIVE_URL = 'https://saathi-tawny-theta.vercel.app';
 
 const config: CapacitorConfig = {
   appId: 'com.saathi.emergency',

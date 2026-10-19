@@ -15,7 +15,7 @@ async function main() {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'api-subscription-key': 'sk_bafne65q_tmDmBcTLO5NV6z24j0dJq7Gh'
+        'api-subscription-key': 'sk_j0aml6s8_dl4vBRupcAFUxw0IwO8qIYjU'
       }
     }, res => {
       let data = '';
@@ -48,7 +48,7 @@ async function main() {
       headers: {
         'Content-Type': 'multipart/form-data; boundary=' + boundary,
         'Content-Length': body.length,
-        'api-subscription-key': 'sk_bafne65q_tmDmBcTLO5NV6z24j0dJq7Gh'
+        'api-subscription-key': 'sk_j0aml6s8_dl4vBRupcAFUxw0IwO8qIYjU'
       }
     }, res => {
       let data = '';
