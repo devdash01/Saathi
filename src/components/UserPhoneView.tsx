@@ -149,22 +149,28 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
     }
   }, [currentInputText]);
 
-  // Auto-acquire real device GPS on mount and stream fix to CAD
+  const hasAutoAcquiredGpsRef = useRef(false);
+  const onGpsLocationAcquiredRef = useRef(onGpsLocationAcquired);
   useEffect(() => {
+    onGpsLocationAcquiredRef.current = onGpsLocationAcquired;
+  }, [onGpsLocationAcquired]);
+
+  // Auto-acquire real device GPS strictly once on mount (single-shot fix, no continuous watch loop)
+  useEffect(() => {
+    if (hasAutoAcquiredGpsRef.current) return;
+    hasAutoAcquiredGpsRef.current = true;
+
     deviceLocationService.acquireGpsFix().then((loc) => {
       if ((loc.source === 'live_gps' || loc.source === 'gps_cached') && loc.coords) {
         setIsAreaShared(true);
-        if (onToggleLiveLocationSharing) {
-          onToggleLiveLocationSharing(true);
-        }
-        if (onGpsLocationAcquired) {
-          onGpsLocationAcquired(loc.coords, loc.accuracyMeters, loc.address);
+        if (onGpsLocationAcquiredRef.current) {
+          onGpsLocationAcquiredRef.current(loc.coords, loc.accuracyMeters, loc.address);
         }
       }
     }).catch(() => {
       // Non-blocking fallback
     });
-  }, [onGpsLocationAcquired, onToggleLiveLocationSharing]);
+  }, []);
 
   // Reference for single active voice message bubble to prevent duplicate messages
   const currentVoiceMessageIdRef = useRef<string | null>(null);

@@ -404,57 +404,70 @@ export function App() {
   };
 
   // 4b. Live GPS Telemetry Fix Acquired
-  const handleGpsLocationAcquired = async (coords: [number, number], accuracy: number, address?: string) => {
-    setLocationError(undefined);
-    let resolvedAddress = address || activeReport.location.address;
-    if (!address) {
-      try {
-        resolvedAddress = await reverseGeocodeCoords(coords[0], coords[1]);
-      } catch (_e) {
-        resolvedAddress = `Live GPS (${coords[0].toFixed(4)}, ${coords[1].toFixed(4)})`;
+  const handleGpsLocationAcquired = useCallback(
+    async (coords: [number, number], accuracy: number, address?: string) => {
+      // Guard against identical coordinate re-dispatch to prevent re-render thrashing
+      if (
+        activeReport.location.source === 'live_gps' &&
+        activeReport.location.coords &&
+        Math.abs(activeReport.location.coords[0] - coords[0]) < 0.0001 &&
+        Math.abs(activeReport.location.coords[1] - coords[1]) < 0.0001
+      ) {
+        return;
       }
-    }
 
-    const nearby = getNearbyServicesForCoordinates(coords[0], coords[1], resolvedAddress);
-    setNearbyServices(nearby);
-
-    const updated: EmergencyReport = {
-      ...activeReport,
-      location: {
-        ...activeReport.location,
-        address: resolvedAddress,
-        coords: coords,
-        accuracyMeters: accuracy,
-        source: 'live_gps',
-        isLiveStreaming: true,
-        lastUpdated: new Date().toISOString()
-      },
-      auditTrail: [
-        ...activeReport.auditTrail,
-        {
-          id: `audit-${Date.now()}`,
-          timestamp: new Date().toISOString(),
-          actor: 'citizen',
-          action: 'GPS_LIVE_TELEMETRY_STREAMING',
-          details: `Live browser GPS fix acquired: ${coords[0].toFixed(5)}, ${coords[1].toFixed(5)} (±${accuracy}m accuracy). Coordinates synced with CAD map.`
+      setLocationError(undefined);
+      let resolvedAddress = address || activeReport.location.address;
+      if (!address) {
+        try {
+          resolvedAddress = await reverseGeocodeCoords(coords[0], coords[1]);
+        } catch (_e) {
+          resolvedAddress = `Live GPS (${coords[0].toFixed(4)}, ${coords[1].toFixed(4)})`;
         }
-      ]
-    };
+      }
 
-    setActiveReport(updated);
-    await reportStorageService.saveReportLocally(updated);
-    setDispatchAlertToast(`Live GPS Acquired: ${resolvedAddress} (±${accuracy}m)`);
-    setTimeout(() => setDispatchAlertToast(null), 3500);
+      const nearby = getNearbyServicesForCoordinates(coords[0], coords[1], resolvedAddress);
+      setNearbyServices(nearby);
 
-    // CRITICAL: Broadcast real-time GPS telemetry to the Operator CAD console!
-    cloudSyncService.broadcast('phone', 'LOCATION_UPDATE', {
-      isLiveStreaming: true,
-      coords: coords,
-      address: resolvedAddress,
-      accuracy: accuracy,
-      nearbyServices: nearby
-    });
-  };
+      const updated: EmergencyReport = {
+        ...activeReport,
+        location: {
+          ...activeReport.location,
+          address: resolvedAddress,
+          coords: coords,
+          accuracyMeters: accuracy,
+          source: 'live_gps',
+          isLiveStreaming: true,
+          lastUpdated: new Date().toISOString()
+        },
+        auditTrail: [
+          ...activeReport.auditTrail,
+          {
+            id: `audit-${Date.now()}`,
+            timestamp: new Date().toISOString(),
+            actor: 'citizen',
+            action: 'GPS_LIVE_TELEMETRY_STREAMING',
+            details: `Live browser GPS fix acquired: ${coords[0].toFixed(5)}, ${coords[1].toFixed(5)} (±${accuracy}m accuracy). Coordinates synced with CAD map.`
+          }
+        ]
+      };
+
+      setActiveReport(updated);
+      await reportStorageService.saveReportLocally(updated);
+      setDispatchAlertToast(`Live GPS Acquired: ${resolvedAddress} (±${accuracy}m)`);
+      setTimeout(() => setDispatchAlertToast(null), 3500);
+
+      // CRITICAL: Broadcast real-time GPS telemetry to the Operator CAD console!
+      cloudSyncService.broadcast('phone', 'LOCATION_UPDATE', {
+        isLiveStreaming: true,
+        coords: coords,
+        address: resolvedAddress,
+        accuracy: accuracy,
+        nearbyServices: nearby
+      });
+    },
+    [activeReport.location.source, activeReport.location.coords, activeReport.location.address, activeReport.auditTrail]
+  );
 
   // 5. Operator Acknowledges Report
   const handleAcknowledgeReport = async () => {
@@ -725,7 +738,7 @@ export function App() {
   );
 
   // 10. Toggle Live Location Sharing
-  const handleToggleLiveLocationSharing = (sharing: boolean) => {
+  const handleToggleLiveLocationSharing = useCallback((sharing: boolean) => {
     if (sharing) {
       deviceLocationService.startLiveTracking();
     } else {
@@ -761,7 +774,7 @@ export function App() {
 
       return updated;
     });
-  };
+  }, []);
 
   // 11. Start New Emergency Session / Reset Chat
   const handleStartNewSession = useCallback((isRemoteSync: boolean = false) => {
