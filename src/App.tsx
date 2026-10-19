@@ -104,6 +104,12 @@ export function App() {
       const params = new URLSearchParams(window.location.search);
       const v = params.get('view');
       if (v === 'cad' || v === 'phone' || v === 'split') return v;
+      // Auto-detect mobile devices or native Capacitor APK environment
+      const isMobile =
+        window.innerWidth <= 800 ||
+        /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+        Boolean((window as any).Capacitor?.isNativePlatform?.());
+      if (isMobile) return 'phone';
     }
     return 'split';
   });
@@ -949,154 +955,175 @@ export function App() {
         </div>
       )}
 
-      {/* GLOBAL VIEW MODE SWITCHER BAR */}
-      <header className="global-app-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <span className="brand-logo-badge">SAATHI 112</span>
-          <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#94a3b8' }}>
-            Emergency Response & CAD Platform
-          </span>
-        </div>
-
-        {/* Real-Time Cloud Link Indicator (Mobile Data & Wi-Fi Sync) */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            background: 'rgba(15, 23, 42, 0.75)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            padding: '4px 12px',
-            borderRadius: '20px',
-            fontSize: '0.74rem'
-          }}
-          title="Live Cloud Sync: Connects mobile app on 4G/5G mobile data with operator workstation"
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: '50%',
-                backgroundColor:
-                  syncStatus === 'connected'
-                    ? '#10b981'
-                    : syncStatus === 'connecting'
-                    ? '#f59e0b'
-                    : '#ef4444',
-                boxShadow: syncStatus === 'connected' ? '0 0 8px #10b981' : 'none'
-              }}
-            />
-            <Radio size={13} style={{ color: syncStatus === 'connected' ? '#10b981' : '#94a3b8' }} />
-            <span style={{ color: '#e2e8f0', fontWeight: 600 }}>
-              {syncStatus === 'connected'
-                ? 'Cloud Sync: Active'
-                : syncStatus === 'connecting'
-                ? 'Connecting...'
-                : 'Offline Sync'}
+      {/* GLOBAL VIEW MODE SWITCHER BAR - Hidden in pure phone view for native mobile experience */}
+      {viewMode !== 'phone' && (
+        <header className="global-app-header">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span className="brand-logo-badge">SAATHI 112</span>
+            <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#94a3b8' }}>
+              Emergency Response & CAD Platform
             </span>
           </div>
 
-          <span style={{ color: '#475569' }}>|</span>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <span style={{ color: '#94a3b8', fontSize: '0.7rem' }}>Room:</span>
-            {isEditingChannel ? (
-              <input
-                type="text"
-                value={syncChannel}
-                onChange={(e) => setSyncChannel(e.target.value)}
-                onBlur={() => {
-                  setIsEditingChannel(false);
-                  cloudSyncService.setChannelId(syncChannel);
+          {/* Real-Time Cloud Link Indicator (Mobile Data & Wi-Fi Sync) */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              background: 'rgba(15, 23, 42, 0.75)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              padding: '4px 12px',
+              borderRadius: '20px',
+              fontSize: '0.74rem'
+            }}
+            title="Live Cloud Sync: Connects mobile app on 4G/5G mobile data with operator workstation"
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  backgroundColor:
+                    syncStatus === 'connected'
+                      ? '#10b981'
+                      : syncStatus === 'connecting'
+                      ? '#f59e0b'
+                      : '#ef4444',
+                  boxShadow: syncStatus === 'connected' ? '0 0 8px #10b981' : 'none'
                 }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
+              />
+              <Radio size={13} style={{ color: syncStatus === 'connected' ? '#10b981' : '#94a3b8' }} />
+              <span style={{ color: '#e2e8f0', fontWeight: 600 }}>
+                {syncStatus === 'connected'
+                  ? 'Cloud Sync: Active'
+                  : syncStatus === 'connecting'
+                  ? 'Connecting...'
+                  : 'Offline Sync'}
+              </span>
+            </div>
+
+            <span style={{ color: '#475569' }}>|</span>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ color: '#94a3b8', fontSize: '0.7rem' }}>Room:</span>
+              {isEditingChannel ? (
+                <input
+                  type="text"
+                  value={syncChannel}
+                  onChange={(e) => setSyncChannel(e.target.value)}
+                  onBlur={() => {
                     setIsEditingChannel(false);
                     cloudSyncService.setChannelId(syncChannel);
-                  }
-                }}
-                style={{
-                  background: '#090d16',
-                  border: '1px solid #3b82f6',
-                  color: '#fff',
-                  fontSize: '0.72rem',
-                  padding: '2px 6px',
-                  borderRadius: '4px',
-                  width: '100px'
-                }}
-                autoFocus
-              />
-            ) : (
-              <button
-                type="button"
-                onClick={() => setIsEditingChannel(true)}
-                title="Click to edit pairing room code for your mobile device"
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#38bdf8',
-                  fontWeight: 700,
-                  fontSize: '0.72rem',
-                  cursor: 'pointer',
-                  padding: 0,
-                  textDecoration: 'underline'
-                }}
-              >
-                #{syncChannel}
-              </button>
-            )}
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      setIsEditingChannel(false);
+                      cloudSyncService.setChannelId(syncChannel);
+                    }
+                  }}
+                  style={{
+                    background: '#090d16',
+                    border: '1px solid #3b82f6',
+                    color: '#fff',
+                    fontSize: '0.72rem',
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    width: '100px'
+                  }}
+                  autoFocus
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setIsEditingChannel(true)}
+                  title="Click to edit pairing room code for your mobile device"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#38bdf8',
+                    fontWeight: 700,
+                    fontSize: '0.72rem',
+                    cursor: 'pointer',
+                    padding: 0,
+                    textDecoration: 'underline'
+                  }}
+                >
+                  #{syncChannel}
+                </button>
+              )}
+            </div>
           </div>
-        </div>
 
-        <div className="view-mode-switcher-bar">
-          <button
-            type="button"
-            className={`view-mode-pill ${viewMode === 'split' ? 'active' : ''}`}
-            onClick={() => {
-              setViewMode('split');
-              if (typeof window !== 'undefined') {
-                const u = new URL(window.location.href);
-                u.searchParams.set('view', 'split');
-                window.history.replaceState({}, '', u.toString());
-              }
-            }}
-            id="btn-view-split"
-          >
-            ⚡ Split View
-          </button>
-          <button
-            type="button"
-            className={`view-mode-pill ${viewMode === 'phone' ? 'active' : ''}`}
-            onClick={() => {
-              setViewMode('phone');
-              if (typeof window !== 'undefined') {
-                const u = new URL(window.location.href);
-                u.searchParams.set('view', 'phone');
-                window.history.replaceState({}, '', u.toString());
-              }
-            }}
-            id="btn-view-phone"
-          >
-            📱 Citizen Phone Only
-          </button>
-          <button
-            type="button"
-            className={`view-mode-pill ${viewMode === 'cad' ? 'active' : ''}`}
-            onClick={() => {
-              setViewMode('cad');
-              if (typeof window !== 'undefined') {
-                const u = new URL(window.location.href);
-                u.searchParams.set('view', 'cad');
-                window.history.replaceState({}, '', u.toString());
-              }
-            }}
-            id="btn-view-cad"
-          >
-            🖥️ Operator CAD Only
-          </button>
-        </div>
-      </header>
+          <div className="view-mode-switcher-bar">
+            <button
+              type="button"
+              className={`view-mode-pill ${viewMode === 'split' ? 'active' : ''}`}
+              onClick={() => {
+                setViewMode('split');
+                if (typeof window !== 'undefined') {
+                  const u = new URL(window.location.href);
+                  u.searchParams.set('view', 'split');
+                  window.history.replaceState({}, '', u.toString());
+                }
+              }}
+              id="btn-view-split"
+            >
+              ⚡ Split View
+            </button>
+            <button
+              type="button"
+              className="view-mode-pill"
+              onClick={() => {
+                setViewMode('phone');
+                if (typeof window !== 'undefined') {
+                  const u = new URL(window.location.href);
+                  u.searchParams.set('view', 'phone');
+                  window.history.replaceState({}, '', u.toString());
+                }
+              }}
+              id="btn-view-phone"
+            >
+              📱 Citizen Phone Only
+            </button>
+            <button
+              type="button"
+              className={`view-mode-pill ${viewMode === 'cad' ? 'active' : ''}`}
+              onClick={() => {
+                setViewMode('cad');
+                if (typeof window !== 'undefined') {
+                  const u = new URL(window.location.href);
+                  u.searchParams.set('view', 'cad');
+                  window.history.replaceState({}, '', u.toString());
+                }
+              }}
+              id="btn-view-cad"
+            >
+              🖥️ Operator CAD Only
+            </button>
+          </div>
+        </header>
+      )}
+
+      {/* Discreet floating switch for desktop browser users viewing phone mode */}
+      {viewMode === 'phone' && (
+        <button
+          type="button"
+          onClick={() => {
+            setViewMode('split');
+            if (typeof window !== 'undefined') {
+              const u = new URL(window.location.href);
+              u.searchParams.set('view', 'split');
+              window.history.replaceState({}, '', u.toString());
+            }
+          }}
+          className="desktop-floating-switch-btn"
+          title="Switch to Operator Split View"
+        >
+          🖥️ Split Console
+        </button>
+      )}
 
       {/* DUAL-PANE SPLIT SCREEN ARCHITECTURE */}
       <div className={`split-screen-layout ${viewMode === 'cad' ? 'view-cad-only' : viewMode === 'phone' ? 'view-phone-only' : ''}`}>

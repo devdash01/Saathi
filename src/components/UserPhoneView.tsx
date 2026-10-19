@@ -12,8 +12,7 @@ import {
   Keyboard,
   PhoneOff,
   MapPin,
-  Radio,
-  Wifi
+  Radio
 } from 'lucide-react';
 import { speechService } from '../services/speechRecognitionService';
 import { transcribeAudioWithSarvam, MicrophoneRecorder } from '../services/sarvamService';
@@ -147,11 +146,16 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
     }
   }, [currentInputText]);
 
+  // Reference for single active voice message bubble to prevent duplicate messages
+  const currentVoiceMessageIdRef = useRef<string | null>(null);
+
   // Core Real-Time Voice Input Handler
   const startLiveVoiceRecognition = useCallback(() => {
     setVoiceError(null);
     setSarvamStatus('transcribing');
     const baseText = transcriptRef.current ? transcriptRef.current.trim() : '';
+    const voiceMsgId = `voice-${Date.now()}`;
+    currentVoiceMessageIdRef.current = voiceMsgId;
 
     const started = speechService.start(
       (result) => {
@@ -165,14 +169,33 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
 
         if (spoken.trim()) {
           const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const newText = `🎤 ${formatted}`;
           setMessages((prev) => {
-            const last = prev[prev.length - 1];
-            if (last && (last as any).isVoiceLive) {
+            const existingIdx = prev.findIndex((m: any) => m.id === voiceMsgId);
+            if (existingIdx >= 0) {
+              const currentMsg = prev[existingIdx];
+              if (currentMsg.text === newText) {
+                return prev;
+              }
               const next = [...prev];
-              next[next.length - 1] = { sender: 'user', text: `🎤 ${formatted}`, time: timeNow, isVoiceLive: !result.isFinal } as any;
+              next[existingIdx] = {
+                ...currentMsg,
+                text: newText,
+                time: timeNow,
+                isVoiceLive: true
+              } as any;
               return next;
             }
-            return [...prev, { sender: 'user', text: `🎤 ${formatted}`, time: timeNow, isVoiceLive: !result.isFinal } as any];
+            return [
+              ...prev,
+              {
+                id: voiceMsgId,
+                sender: 'user',
+                text: newText,
+                time: timeNow,
+                isVoiceLive: true
+              } as any
+            ];
           });
         }
       },
@@ -183,6 +206,13 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
       },
       () => {
         setIsVoiceListening(false);
+        const activeId = currentVoiceMessageIdRef.current;
+        if (activeId) {
+          setMessages((prev) =>
+            prev.map((m: any) => (m.id === activeId ? { ...m, isVoiceLive: false } : m))
+          );
+          currentVoiceMessageIdRef.current = null;
+        }
       }
     );
 
@@ -197,6 +227,13 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
   const stopLiveVoiceRecognition = useCallback(() => {
     speechService.stop();
     setIsVoiceListening(false);
+    const activeId = currentVoiceMessageIdRef.current;
+    if (activeId) {
+      setMessages((prev) =>
+        prev.map((m: any) => (m.id === activeId ? { ...m, isVoiceLive: false } : m))
+      );
+      currentVoiceMessageIdRef.current = null;
+    }
     if (micRecorderRef.current && micRecorderRef.current.isRecording()) {
       micRecorderRef.current.stop().then((blob) => {
         const url = URL.createObjectURL(blob);
@@ -315,7 +352,7 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
   // Quick exit disguise screen
   if (isQuickExited) {
     return (
-      <div className="smartphone-device-frame" style={{ background: '#f8fafc', padding: '24px 16px' }}>
+      <div className="citizen-native-app" style={{ background: '#f8fafc', padding: '24px 16px', minHeight: '100vh', width: '100%' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h2 style={{ fontSize: '1.2rem', color: '#0f172a', fontWeight: 800 }}>Weather — New Delhi</h2>
           <button
@@ -337,75 +374,7 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
   const dynamicEvidence = activeReport?.triage.evidenceLinks || [];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
-      {/* Phone Presentation Header with Device Badge */}
-      <div className="phone-presentation-header">
-        <div className="phone-device-badge">
-          <span className="live-user-dot" />
-          <span>Citizen Smartphone (181)</span>
-        </div>
-        <span style={{ fontSize: '0.65rem', color: '#64748b', fontWeight: 600 }}>Live Audio / Touch</span>
-      </div>
-
-      {/* Screen Mode Switcher (Pages 1 to 5) */}
-      <div className="phone-demo-nav-bar" style={{ marginBottom: '12px', maxWidth: '380px' }}>
-        <button
-          onClick={() => setActiveScreen('landing')}
-          className={`demo-nav-pill ${activeScreen === 'landing' ? 'active' : ''}`}
-        >
-          1: Home
-        </button>
-        <button
-          onClick={() => {
-            setActiveScreen('call');
-            setCallSeconds(0);
-          }}
-          className={`demo-nav-pill ${activeScreen === 'call' ? 'active' : ''}`}
-        >
-          2: Call 181
-        </button>
-        <button
-          onClick={() => setActiveScreen('chat')}
-          className={`demo-nav-pill ${activeScreen === 'chat' ? 'active' : ''}`}
-        >
-          3: Silent Chat
-        </button>
-        <button
-          onClick={() => setActiveScreen('confirm')}
-          className={`demo-nav-pill ${activeScreen === 'confirm' ? 'active' : ''}`}
-        >
-          4: Confirm
-        </button>
-        <button
-          onClick={() => setActiveScreen('case')}
-          className={`demo-nav-pill ${activeScreen === 'case' ? 'active' : ''}`}
-        >
-          5: Case Status
-        </button>
-      </div>
-
-      {/* ======================================================== */}
-      {/* REALISTIC SMARTPHONE CHASSIS                             */}
-      {/* ======================================================== */}
-      <div className="smartphone-device-frame">
-        {/* Mobile Top Status Bar */}
-        <div className="smartphone-status-bar">
-          <span>{phoneTime}</span>
-          <div className="status-bar-notch">
-            <span className="notch-camera-lens" />
-            <span className="notch-sensor-dot" style={{ background: isVoiceListening ? '#ef4444' : '#047857' }} />
-          </div>
-          <div className="status-bar-right-icons">
-            <Wifi size={12} />
-            <span style={{ fontSize: '0.62rem', fontWeight: 800 }}>5G</span>
-            <div className="battery-icon-pill">
-              <div className="battery-fill-level" />
-            </div>
-          </div>
-        </div>
-
-        {/* Inner Phone Viewport */}
-        <div className="smartphone-inner-screen">
+    <div className="citizen-native-app">
           {/* ======================================================== */}
           {/* PAGE 1: CITIZEN LANDING SCREEN (You are not alone)       */}
           {/* ======================================================== */}
@@ -1530,13 +1499,6 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
               </div>
             </div>
           )}
-        </div>
-
-        {/* Bottom Smartphone Home Indicator Bar */}
-        <div className="smartphone-home-bar">
-          <div className="home-swipe-indicator" />
-        </div>
-      </div>
     </div>
   );
 };

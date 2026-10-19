@@ -49,10 +49,13 @@ export class BrowserSpeechRecognitionService {
           }
 
           const currentText = (accumulatedFinal + interim).trim();
+          const lastResult = event.results[event.results.length - 1];
+          const isFinal = Boolean(lastResult && lastResult.isFinal);
+
           if (currentText && this.onResultCallback) {
             this.onResultCallback({
               transcript: currentText,
-              isFinal: Boolean(accumulatedFinal)
+              isFinal
             });
           }
         };
