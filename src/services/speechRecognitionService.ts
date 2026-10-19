@@ -1,12 +1,14 @@
 /**
- * SAATHI Zero-Lag Real-Time Voice + Sarvam AI Intelligence Service
+ * SAATHI Real-Time Voice Intelligence Service Powered by Sarvam AI (saaras:v4)
  * 
- * 1. ZERO-LAG LIVE DISPLAY: Local on-device SpeechRecognition streams words with 0ms latency.
- * 2. SARVAM AI REFINEMENT: Microphone audio is captured in parallel and transcribed by Sarvam AI saaras:v4.
- * 3. DEDUPLICATION: Rigorous boundary & phrase dedup permanently eliminates repetitive word bugs.
+ * 1. ZERO-LAG LIVE DISPLAY: Sarvam AI Realtime Streaming WebSocket receives live 16kHz PCM audio
+ *    and streams back partial transcripts with ultra-low latency directly as words are spoken.
+ * 2. 100% PURE SARVAM AI: Driven by Sarvam's state-of-the-art Indic 'saaras:v4' model with codemix support.
+ * 3. FALLBACK RESILIENCE: Gracefully falls back to on-device SpeechRecognition if offline.
+ * 4. DEDUPLICATION: Rigorous boundary & phrase dedup eliminates repetitive word/stutter bugs.
  */
 
-import { transcribeAudioWithSarvam } from './sarvamService';
+import { SARVAM_API_KEY } from './sarvamService';
 
 export interface SpeechRecognitionResultState {
   transcript: string;
@@ -101,7 +103,6 @@ export function assembleSpeechResults(resultsList: string[]): string {
         const cStart = chunkWords.slice(0, k).map(stripWord).join(' ');
         if (pEnd === cStart) {
           overlap = k;
-          break;
         }
       }
       if (overlap > 0) {
@@ -112,6 +113,57 @@ export function assembleSpeechResults(resultsList: string[]): string {
     }
   }
   return segments.join(' ').trim();
+}
+
+/**
+ * Downsamples Float32 audio to 16-bit PCM Linear16 at target sample rate (default 16000Hz)
+ */
+function downsampleBuffer(
+  buffer: Float32Array,
+  inputSampleRate: number,
+  outputSampleRate: number = 16000
+): Int16Array {
+  if (outputSampleRate === inputSampleRate) {
+    const output = new Int16Array(buffer.length);
+    for (let i = 0; i < buffer.length; i++) {
+      const s = Math.max(-1, Math.min(1, buffer[i]));
+      output[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+    }
+    return output;
+  }
+  const sampleRateRatio = inputSampleRate / outputSampleRate;
+  const newLength = Math.round(buffer.length / sampleRateRatio);
+  const result = new Int16Array(newLength);
+  let offsetResult = 0;
+  let offsetBuffer = 0;
+  while (offsetResult < result.length) {
+    const nextOffsetBuffer = Math.round((offsetResult + 1) * sampleRateRatio);
+    let accum = 0;
+    let count = 0;
+    for (let i = offsetBuffer; i < nextOffsetBuffer && i < buffer.length; i++) {
+      accum += buffer[i];
+      count++;
+    }
+    const s = Math.max(-1, Math.min(1, count > 0 ? accum / count : 0));
+    result[offsetResult] = s < 0 ? s * 0x8000 : s * 0x7fff;
+    offsetResult++;
+    offsetBuffer = nextOffsetBuffer;
+  }
+  return result;
+}
+
+/**
+ * Converts 16-bit PCM Int16Array to Base64 string efficiently
+ */
+function int16ToBase64(int16Array: Int16Array): string {
+  const bytes = new Uint8Array(int16Array.buffer, int16Array.byteOffset, int16Array.byteLength);
+  let binary = '';
+  const len = bytes.byteLength;
+  const chunkSize = 8192;
+  for (let i = 0; i < len; i += chunkSize) {
+    binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, Math.min(i + chunkSize, len))));
+  }
+  return window.btoa(binary);
 }
 
 interface IWindowWithSpeech extends Window {
@@ -126,15 +178,19 @@ export class HybridSpeechRecognitionService {
   private onErrorCallback: ((error: string) => void) | null = null;
   private onEndCallback: (() => void) | null = null;
   private currentLanguage: string = 'hi-IN';
-  private mediaRecorder: MediaRecorder | null = null;
-  private audioChunks: Blob[] = [];
+
+  // Sarvam Realtime Streaming WebSocket & Web Audio components
+  private ws: WebSocket | null = null;
+  private audioContext: AudioContext | null = null;
+  private scriptProcessor: ScriptProcessorNode | null = null;
   private mediaStream: MediaStream | null = null;
+  private isUsingSarvamWs: boolean = false;
 
   constructor() {
-    this.initRecognition();
+    this.initFallbackRecognition();
   }
 
-  private initRecognition() {
+  private initFallbackRecognition() {
     if (typeof window !== 'undefined') {
       const win = window as IWindowWithSpeech;
       const SpeechClass = win.SpeechRecognition || win.webkitSpeechRecognition;
@@ -146,6 +202,9 @@ export class HybridSpeechRecognitionService {
         this.recognition.lang = this.currentLanguage;
 
         this.recognition.onresult = (event: any) => {
+          // If Sarvam WebSocket is currently streaming live results, don't overwrite
+          if (this.isUsingSarvamWs) return;
+
           const rawChunks: string[] = [];
           for (let i = 0; i < event.results.length; ++i) {
             const res = event.results[i];
@@ -169,23 +228,25 @@ export class HybridSpeechRecognitionService {
         };
 
         this.recognition.onerror = (event: any) => {
-          console.warn('SpeechRecognition error:', event.error);
+          if (this.isUsingSarvamWs) return;
+          console.warn('Fallback SpeechRecognition error:', event.error);
           if (event.error !== 'no-speech' && this.onErrorCallback) {
             this.onErrorCallback(event.error);
           }
         };
 
         this.recognition.onend = () => {
-          // If still marked as listening, seamlessly resume recognition
-          if (this.isListeningState) {
+          if (this.isListeningState && !this.isUsingSarvamWs) {
             try {
               this.recognition.start();
               return;
             } catch (_e) {}
           }
-          this.isListeningState = false;
-          if (this.onEndCallback) {
-            this.onEndCallback();
+          if (!this.isUsingSarvamWs) {
+            this.isListeningState = false;
+            if (this.onEndCallback) {
+              this.onEndCallback();
+            }
           }
         };
       }
@@ -195,7 +256,11 @@ export class HybridSpeechRecognitionService {
   public isSupported(): boolean {
     if (typeof window === 'undefined') return false;
     const win = window as IWindowWithSpeech;
-    return Boolean(win.SpeechRecognition || win.webkitSpeechRecognition);
+    return Boolean(
+      (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) ||
+      win.SpeechRecognition ||
+      win.webkitSpeechRecognition
+    );
   }
 
   public setLanguage(lang: 'Hinglish' | 'Hindi' | 'English'): void {
@@ -218,52 +283,183 @@ export class HybridSpeechRecognitionService {
     this.onErrorCallback = onError || null;
     this.onEndCallback = onEnd || null;
     this.isListeningState = true;
+    this.isUsingSarvamWs = false;
 
-    // 1. Start zero-lag on-device live speech recognition
-    let started = false;
+    // Check if browser supports getUserMedia for Sarvam Realtime WebSocket streaming
+    if (navigator.mediaDevices?.getUserMedia) {
+      navigator.mediaDevices
+        .getUserMedia({
+          audio: {
+            channelCount: 1,
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
+        })
+        .then((stream) => {
+          if (!this.isListeningState) {
+            stream.getTracks().forEach((t) => t.stop());
+            return;
+          }
+          this.mediaStream = stream;
+
+          const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+          if (!AudioContextClass) {
+            this.startFallbackRecognition();
+            return;
+          }
+
+          const ctx = new AudioContextClass();
+          this.audioContext = ctx;
+          if (ctx.state === 'suspended') {
+            ctx.resume().catch(() => {});
+          }
+
+          // Connect directly to Sarvam AI Realtime Streaming WebSocket
+          const lang = this.currentLanguage || 'hi-IN';
+          const wsUrl = `wss://api.sarvam.ai/speech-to-text-realtime/ws?language_code=${encodeURIComponent(lang)}&model=saaras:v4&mode=codemix`;
+          
+          try {
+            const ws = new WebSocket(wsUrl, [`api-subscription-key.${SARVAM_API_KEY}`]);
+            this.ws = ws;
+
+            ws.onopen = () => {
+              if (!this.isListeningState) {
+                ws.close();
+                return;
+              }
+              this.isUsingSarvamWs = true;
+
+              const source = ctx.createMediaStreamSource(stream);
+              const processor = ctx.createScriptProcessor(4096, 1, 1);
+              this.scriptProcessor = processor;
+
+              // Zero-gain mute node to keep processor active without echoing microphone sound through speakers
+              const muteGain = ctx.createGain();
+              muteGain.gain.value = 0;
+
+              processor.onaudioprocess = (e) => {
+                if (!this.isListeningState || ws.readyState !== WebSocket.OPEN) return;
+                const inputData = e.inputBuffer.getChannelData(0);
+                const downsampled = downsampleBuffer(inputData, ctx.sampleRate, 16000);
+                const b64 = int16ToBase64(downsampled);
+
+                ws.send(
+                  JSON.stringify({
+                    event: 'audio_input',
+                    audio: b64
+                  })
+                );
+              };
+
+              source.connect(processor);
+              processor.connect(muteGain);
+              muteGain.connect(ctx.destination);
+            };
+
+            ws.onmessage = (event) => {
+              try {
+                const data = JSON.parse(event.data);
+                if (data.event === 'transcript.partial' && data.text) {
+                  const cleaned = cleanDuplicateSpeech(data.text);
+                  if (cleaned && this.onResultCallback) {
+                    this.onResultCallback({
+                      transcript: cleaned,
+                      isFinal: false
+                    });
+                  }
+                } else if (data.event === 'transcript.final' && data.text) {
+                  const cleaned = cleanDuplicateSpeech(data.text);
+                  if (cleaned && this.onResultCallback) {
+                    this.onResultCallback({
+                      transcript: cleaned,
+                      isFinal: true
+                    });
+                  }
+                }
+              } catch (_e) {}
+            };
+
+            ws.onerror = (err) => {
+              console.warn('Sarvam Realtime WebSocket error:', err);
+              if (!this.isUsingSarvamWs) {
+                this.cleanupAudio();
+                this.startFallbackRecognition();
+              }
+            };
+
+            ws.onclose = () => {
+              if (this.isListeningState && this.isUsingSarvamWs) {
+                this.cleanupAudio();
+                this.startFallbackRecognition();
+              }
+            };
+          } catch (wsErr) {
+            console.warn('WebSocket init error:', wsErr);
+            this.cleanupAudio();
+            this.startFallbackRecognition();
+          }
+        })
+        .catch((err) => {
+          console.warn('Microphone access error:', err);
+          this.startFallbackRecognition();
+        });
+      return true;
+    }
+
+    // Direct fallback if getUserMedia is not supported
+    return this.startFallbackRecognition();
+  }
+
+  private startFallbackRecognition(): boolean {
     if (this.recognition) {
       try {
         this.recognition.start();
-        started = true;
+        return true;
       } catch (e: any) {
-        if (e.name === 'InvalidStateError') {
-          started = true;
-        } else {
-          console.warn('Speech recognition start error:', e);
-        }
+        if (e.name === 'InvalidStateError') return true;
+        console.warn('Fallback recognition start error:', e);
       }
     }
-
-    // 2. Parallel audio recording for Sarvam AI STT
-    if (navigator.mediaDevices?.getUserMedia) {
-      navigator.mediaDevices
-        .getUserMedia({ audio: true })
-        .then((stream) => {
-          this.mediaStream = stream;
-          this.audioChunks = [];
-          try {
-            this.mediaRecorder = new MediaRecorder(stream);
-            this.mediaRecorder.ondataavailable = (e) => {
-              if (e.data.size > 0) this.audioChunks.push(e.data);
-            };
-            this.mediaRecorder.start(250);
-          } catch (_e) {}
-        })
-        .catch((err) => {
-          console.warn('Microphone recording stream error:', err);
-        });
+    if (this.onErrorCallback) {
+      this.onErrorCallback('Speech recognition not supported in this browser.');
     }
+    return false;
+  }
 
-    if (!started && !this.recognition) {
-      if (onError) onError('Speech recognition not supported in this browser.');
-      return false;
+  private cleanupAudio(): void {
+    if (this.ws) {
+      try {
+        if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
+          this.ws.close();
+        }
+      } catch (_e) {}
+      this.ws = null;
     }
-
-    return true;
+    if (this.scriptProcessor) {
+      try {
+        this.scriptProcessor.disconnect();
+      } catch (_e) {}
+      this.scriptProcessor = null;
+    }
+    if (this.audioContext) {
+      try {
+        this.audioContext.close().catch(() => {});
+      } catch (_e) {}
+      this.audioContext = null;
+    }
+    if (this.mediaStream) {
+      try {
+        this.mediaStream.getTracks().forEach((track) => track.stop());
+      } catch (_e) {}
+      this.mediaStream = null;
+    }
   }
 
   public stop(): void {
     this.isListeningState = false;
+    this.isUsingSarvamWs = false;
+    this.cleanupAudio();
 
     if (this.recognition) {
       try {
@@ -271,33 +467,8 @@ export class HybridSpeechRecognitionService {
       } catch (_e) {}
     }
 
-    // Stop MediaRecorder and transcribe with Sarvam AI STT
-    if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
-      try {
-        this.mediaRecorder.onstop = () => {
-          if (this.audioChunks.length > 0) {
-            const audioBlob = new Blob(this.audioChunks, { type: 'audio/wav' });
-            transcribeAudioWithSarvam(audioBlob, 'codemix')
-              .then((res) => {
-                if (res.transcript && this.onResultCallback) {
-                  const cleaned = cleanDuplicateSpeech(res.transcript.trim());
-                  if (cleaned) {
-                    this.onResultCallback({
-                      transcript: cleaned,
-                      isFinal: true
-                    });
-                  }
-                }
-              })
-              .catch(() => {});
-          }
-          if (this.mediaStream) {
-            this.mediaStream.getTracks().forEach((t) => t.stop());
-            this.mediaStream = null;
-          }
-        };
-        this.mediaRecorder.stop();
-      } catch (_e) {}
+    if (this.onEndCallback) {
+      this.onEndCallback();
     }
   }
 
