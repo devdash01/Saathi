@@ -965,6 +965,24 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
                 <div className="operator-listening-tag" style={{ color: isVoiceListening ? '#4ade80' : '#cbd5e1' }}>
                   {isVoiceListening ? '🎤 Transcribing live... Operator is listening' : 'Operator OP-07 connected · Tap mic to speak'}
                 </div>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  marginTop: '4px'
+                }}>
+                  <span style={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: '50%',
+                    background: isVoiceListening ? '#ef4444' : '#10b981',
+                    boxShadow: isVoiceListening ? '0 0 8px #ef4444' : '0 0 6px #10b981'
+                  }} />
+                  <span style={{ fontSize: '0.62rem', color: '#94a3b8', fontWeight: 600 }}>
+                    AI Speech Engine: <strong style={{ color: '#38bdf8' }}>Sarvam AI (saaras:v4)</strong>
+                  </span>
+                </div>
                 {voiceError && (
                   <div style={{ fontSize: '0.65rem', color: '#fca5a5', marginTop: '4px', textAlign: 'center' }}>
                     {voiceError}
