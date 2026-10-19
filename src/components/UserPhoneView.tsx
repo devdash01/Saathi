@@ -181,7 +181,21 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
 
         if (spoken.trim()) {
           const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          const newText = `🎤 ${cleanDuplicateSpeech(formatted)}`;
+          let bubbleText = formatted;
+          if (baseText) {
+            const bNorm = baseText.toLowerCase().replace(/[^\w\u0900-\u097F\s]/g, '').trim();
+            const fNorm = formatted.toLowerCase().replace(/[^\w\u0900-\u097F\s]/g, '').trim();
+            if (fNorm.startsWith(bNorm)) {
+              const remainder = formatted.slice(baseText.length).replace(/^[.,!?\s]+/, '').trim();
+              if (remainder) {
+                bubbleText = remainder;
+              }
+            }
+          }
+          const cleanBubble = cleanDuplicateSpeech(bubbleText);
+          if (!cleanBubble) return;
+
+          const newText = `🎤 ${cleanBubble}`;
           setMessages((prev) => {
             const existingIdx = prev.findIndex((m: any) => m.id === voiceMsgId);
             if (existingIdx >= 0) {
