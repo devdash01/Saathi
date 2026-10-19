@@ -140,9 +140,12 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
 
   // Sync incoming text from parent without overriding user's active session
   useEffect(() => {
-    if (currentInputText && currentInputText !== transcript) {
-      setTranscript(currentInputText);
-      transcriptRef.current = currentInputText;
+    if (currentInputText) {
+      const cleaned = cleanDuplicateSpeech(currentInputText);
+      if (cleaned && cleaned !== transcriptRef.current) {
+        setTranscript(cleaned);
+        transcriptRef.current = cleaned;
+      }
     }
   }, [currentInputText]);
 
@@ -153,13 +156,14 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
   const startLiveVoiceRecognition = useCallback(() => {
     setVoiceError(null);
     setSarvamStatus('transcribing');
-    const baseText = transcriptRef.current ? transcriptRef.current.trim() : '';
+    const baseText = transcriptRef.current ? cleanDuplicateSpeech(transcriptRef.current.trim()) : '';
     const voiceMsgId = `voice-${Date.now()}`;
     currentVoiceMessageIdRef.current = voiceMsgId;
 
     const started = speechService.start(
       (result) => {
         const spoken = cleanDuplicateSpeech(result.transcript);
+        if (!spoken) return;
         const formatted = isWhisperMode && !spoken.includes('[whisper]') ? `[whisper] ${spoken}` : spoken;
 
         let accumulated: string;
@@ -167,10 +171,26 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
           accumulated = formatted;
         } else if (formatted.toLowerCase().startsWith(baseText.toLowerCase())) {
           accumulated = formatted;
-        } else if (baseText.toLowerCase().endsWith(formatted.toLowerCase())) {
+        } else if (baseText.toLowerCase().includes(formatted.toLowerCase())) {
           accumulated = baseText;
         } else {
-          accumulated = `${baseText} ${formatted}`;
+          // Check overlap between end of baseText and start of formatted
+          const baseWords = baseText.split(/\s+/);
+          const spokenWords = formatted.split(/\s+/);
+          let overlap = 0;
+          for (let k = Math.min(baseWords.length, spokenWords.length); k > 0; k--) {
+            const bEnd = baseWords.slice(-k).join(' ').toLowerCase();
+            const sStart = spokenWords.slice(0, k).join(' ').toLowerCase();
+            if (bEnd === sStart) {
+              overlap = k;
+              break;
+            }
+          }
+          if (overlap > 0) {
+            accumulated = `${baseText} ${spokenWords.slice(overlap).join(' ')}`;
+          } else {
+            accumulated = `${baseText}. ${formatted}`;
+          }
         }
         accumulated = cleanDuplicateSpeech(accumulated);
 
@@ -296,6 +316,34 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
       onStartNewSession();
     }
   };
+
+  // Dedicated Chat Message Sender with robust deduplication
+  const handleSendChatMessage = useCallback(() => {
+    const val = chatInput.trim();
+    if (!val) return;
+
+    const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    setMessages((prev) => [
+      ...prev,
+      { sender: 'user', text: val, time: timeNow }
+    ]);
+
+    const currentT = transcriptRef.current ? cleanDuplicateSpeech(transcriptRef.current.trim()) : '';
+    let updated: string;
+    if (!currentT) {
+      updated = val;
+    } else if (currentT.toLowerCase().endsWith(val.toLowerCase()) || currentT.toLowerCase().includes(val.toLowerCase())) {
+      updated = currentT;
+    } else {
+      updated = `${currentT}. ${val}`;
+    }
+    updated = cleanDuplicateSpeech(updated);
+
+    setTranscript(updated);
+    transcriptRef.current = updated;
+    onUserInputChange(updated);
+    setChatInput('');
+  }, [chatInput, onUserInputChange]);
 
   // Real browser geolocation acquisition with permission prompt
   const handleShareLiveLocation = async () => {
@@ -623,8 +671,10 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
                 </button>
               </div>
 
-              {/* Center Microphone Recording Action */}
-              <div className="live-call-center-visual">
+              {/* Scrollable middle section */}
+              <div style={{ padding: '0 16px 20px', display: 'flex', flexDirection: 'column', gap: '10px', flex: 1, overflowY: 'auto' }}>
+                {/* Center Microphone Recording Action */}
+                <div className="live-call-center-visual">
                 <div className="ripple-circle-outer">
                   <div className="ripple-circle-mid">
                     <button
@@ -786,9 +836,10 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
                   />
                 </button>
               </div>
+            </div>
 
-              {/* Bottom 3 Call Controls */}
-              <div className="call-bottom-controls-row">
+            {/* Bottom 3 Call Controls */}
+            <div className="call-bottom-controls-row">
                 <button
                   onClick={() => {
                     if (isVoiceListening) {
@@ -1077,7 +1128,7 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
               </div>
 
               {/* Bottom Chat Message Input Row with Voice Microphone & Live Location Button */}
-              <div style={{ display: 'flex', gap: '8px', padding: '10px 14px', background: '#ffffff', borderTop: '1px solid #e2e8f0', alignItems: 'center' }}>
+              <div className="chat-bottom-input-bar">
                 <button
                   onClick={handleToggleVoiceInput}
                   title={isVoiceListening ? 'Stop listening' : 'Tap to speak your message'}
@@ -1123,28 +1174,12 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
                 <input
                   type="text"
                   value={chatInput}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setChatInput(val);
-                    if (val.trim().length >= 3) {
-                      const liveCombined = transcript ? `${transcript}. ${val.trim()}` : val.trim();
-                      onUserInputChange(liveCombined);
-                    }
-                  }}
+                  onChange={(e) => setChatInput(e.target.value)}
                   placeholder={isVoiceListening ? 'Listening... Speak now' : 'Type a message (e.g. mujhe madad chahiye)...'}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' && chatInput.trim()) {
-                      const val = chatInput.trim();
-                      const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                      setMessages((prev) => [
-                        ...prev,
-                        { sender: 'user', text: val, time: timeNow }
-                      ]);
-                      const updated = transcript ? `${transcript}. ${val}` : val;
-                      setTranscript(updated);
-                      transcriptRef.current = updated;
-                      onUserInputChange(updated);
-                      setChatInput('');
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleSendChatMessage();
                     }
                   }}
                   style={{
@@ -1158,21 +1193,8 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
                   }}
                 />
                 <button
-                  onClick={() => {
-                    if (chatInput.trim()) {
-                      const val = chatInput.trim();
-                      const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                      setMessages((prev) => [
-                        ...prev,
-                        { sender: 'user', text: val, time: timeNow }
-                      ]);
-                      const updated = transcript ? `${transcript}. ${val}` : val;
-                      setTranscript(updated);
-                      transcriptRef.current = updated;
-                      onUserInputChange(updated);
-                      setChatInput('');
-                    }
-                  }}
+                  onClick={handleSendChatMessage}
+                  title="Send message"
                   style={{
                     width: 34,
                     height: 34,
@@ -1198,7 +1220,7 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
           {/* ======================================================== */}
           {activeScreen === 'confirm' && (
             <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#f2f4f8' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: '#111827', color: '#ffffff' }}>
+              <div className="confirm-top-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: '#111827', color: '#ffffff' }}>
                 <span style={{ fontSize: '0.78rem', fontWeight: 700 }}>181 · Step 2 of 3</span>
                 <button onClick={handleQuickExit} className="quick-exit-btn">
                   Quick exit
@@ -1325,7 +1347,7 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
                 </div>
 
                 {/* Decision Buttons */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '6px' }}>
+                <div className="confirm-bottom-actions" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '6px' }}>
                   <button
                     onClick={() => setActiveScreen('case')}
                     style={{
@@ -1473,7 +1495,7 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
                 </div>
 
                 {/* Bottom Buttons */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <div className="case-bottom-actions" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                   <button
                     onClick={() => setActiveScreen('chat')}
                     style={{

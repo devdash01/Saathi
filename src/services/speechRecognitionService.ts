@@ -12,31 +12,54 @@ export type SpeechCallback = (result: SpeechRecognitionResultState) => void;
 
 /**
  * Remove stutter, consecutive identical words, and duplicated phrases
+/**
+ * Remove stutter, consecutive identical words, and duplicated phrases
  * caused by Android Chrome/WebView Web Speech API bugs.
  */
 export function cleanDuplicateSpeech(text: string): string {
   if (!text) return '';
-  const words = text.trim().split(/\s+/);
-  if (words.length <= 1) return text.trim();
+  let str = text.trim();
 
-  // 1. Remove consecutive identical words (e.g. "please please please" -> "please")
-  const deduped: string[] = [];
+  // 1. Clean repetitive punctuation stutters like "..", ",,", "??", etc.
+  str = str.replace(/([.,!?])\s*\1+/g, '$1');
+
+  // 2. Remove repeating multi-word phrases (e.g. "mujhe madad chahiye mujhe madad chahiye")
+  for (let len = 8; len >= 1; len--) {
+    const phrasePattern = `(?:^|\\s+)((?:[^\\s.,!?]+(?:\\s+[^\\s.,!?]+){${len - 1}}))([.,!?]?)(?:\\s+\\1\\2?)+(?=$|[\\s.,!?])`;
+    const regex = new RegExp(phrasePattern, 'gi');
+    str = str.replace(regex, (match, p1, p2) => (match.startsWith(' ') ? ' ' : '') + p1 + p2);
+  }
+
+  // 3. Remove incremental prefix stutters (e.g. "ple plea please" or "ple. plea. please")
+  const tokens = str.split(/\s+/);
+  const out: string[] = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const cur = tokens[i];
+    const next = tokens[i + 1];
+    if (next) {
+      const cClean = cur.replace(/[^\w\u0900-\u097F]/g, '').toLowerCase();
+      const nClean = next.replace(/[^\w\u0900-\u097F]/g, '').toLowerCase();
+      if (cClean.length >= 2 && nClean.startsWith(cClean) && nClean.length > cClean.length) {
+        continue;
+      }
+    }
+    out.push(cur);
+  }
+  str = out.join(' ');
+
+  // 4. Clean up any lingering consecutive duplicate words
+  const words = str.split(/\s+/);
+  const finalWords: string[] = [];
+  const strip = (s: string) => s.toLowerCase().replace(/^[^\w\u0900-\u097F]+|[^\w\u0900-\u097F]+$/g, '');
   for (let i = 0; i < words.length; i++) {
-    const curr = words[i];
-    const prev = deduped[deduped.length - 1];
-    if (!prev || curr.toLowerCase() !== prev.toLowerCase()) {
-      deduped.push(curr);
+    const w = words[i];
+    const prev = finalWords[finalWords.length - 1];
+    if (!prev || strip(w) !== strip(prev)) {
+      finalWords.push(w);
     }
   }
 
-  let cleaned = deduped.join(' ');
-
-  // 2. Remove repeating multi-word phrases (e.g. "help me help me" -> "help me")
-  for (let len = 6; len >= 2; len--) {
-    const phraseRegex = new RegExp(`(\\b(?:\\S+\\s+){${len - 1}}\\S+)(?:\\s+\\1)+`, 'gi');
-    cleaned = cleaned.replace(phraseRegex, '$1');
-  }
-  return cleaned.trim();
+  return finalWords.join(' ').replace(/\s+([.,!?])/g, '$1').trim();
 }
 
 interface IWindowWithSpeech extends Window {
@@ -51,7 +74,6 @@ export class BrowserSpeechRecognitionService {
   private onErrorCallback: ((error: string) => void) | null = null;
   private onEndCallback: (() => void) | null = null;
   private currentLanguage: string = 'hi-IN';
-  private sessionFinalTranscript: string = '';
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -65,20 +87,45 @@ export class BrowserSpeechRecognitionService {
         this.recognition.lang = this.currentLanguage;
 
         this.recognition.onresult = (event: any) => {
+          let final = '';
           let interim = '';
 
-          for (let i = event.resultIndex; i < event.results.length; ++i) {
+          for (let i = 0; i < event.results.length; ++i) {
             const res = event.results[i];
-            const text = res[0]?.transcript || '';
+            if (!res || !res[0]) continue;
+            const text = (res[0].transcript || '').trim();
+            if (!text) continue;
             if (res.isFinal) {
-              this.sessionFinalTranscript += ' ' + text;
+              final += (final ? ' ' : '') + text;
             } else {
-              interim += ' ' + text;
+              interim += (interim ? ' ' : '') + text;
             }
           }
 
-          const rawCombined = (this.sessionFinalTranscript + ' ' + interim).trim();
-          const cleaned = cleanDuplicateSpeech(rawCombined);
+          let combined = '';
+          if (final && interim) {
+            // Deduplicate boundary if interim starts with final or part of final
+            const fWords = final.split(/\s+/);
+            const iWords = interim.split(/\s+/);
+            let overlap = 0;
+            for (let k = Math.min(fWords.length, iWords.length); k > 0; k--) {
+              const fEnd = fWords.slice(-k).join(' ').toLowerCase();
+              const iStart = iWords.slice(0, k).join(' ').toLowerCase();
+              if (fEnd === iStart) {
+                overlap = k;
+                break;
+              }
+            }
+            if (overlap > 0) {
+              combined = final + ' ' + iWords.slice(overlap).join(' ');
+            } else {
+              combined = final + ' ' + interim;
+            }
+          } else {
+            combined = final || interim;
+          }
+
+          const cleaned = cleanDuplicateSpeech(combined);
 
           const lastResult = event.results[event.results.length - 1];
           const isFinal = Boolean(lastResult && lastResult.isFinal);
@@ -136,8 +183,6 @@ export class BrowserSpeechRecognitionService {
     this.onResultCallback = onResult;
     this.onErrorCallback = onError || null;
     this.onEndCallback = onEnd || null;
-
-    this.sessionFinalTranscript = '';
 
     try {
       this.recognition.start();

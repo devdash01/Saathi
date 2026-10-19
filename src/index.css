@@ -28,6 +28,10 @@
 
   --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
+
+  /* Native Mobile Safe Area Insets (Android Status Bar & 3-Button Navigation Bar) */
+  --safe-top: max(env(safe-area-inset-top, 0px), 40px);
+  --safe-bottom: max(env(safe-area-inset-bottom, 0px), 36px);
 }
 
 * {
@@ -665,6 +669,68 @@ body {
     border-bottom: 2px solid var(--border-medium);
     padding: 12px 8px;
   }
+}
+
+/* ======================================================== */
+/* PURE CITIZEN PHONE VIEWPORT (CAPACITOR APK & MOBILE)     */
+/* ======================================================== */
+.split-screen-layout.view-phone-only {
+  width: 100% !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  background: #f2f4f8 !important;
+}
+
+.view-phone-only .user-phone-pane {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  height: 100% !important;
+  height: 100dvh !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  background: #f2f4f8 !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.citizen-native-app {
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+  background: #f2f4f8;
+}
+
+.desktop-floating-switch-btn {
+  position: fixed;
+  bottom: calc(var(--safe-bottom) + 12px);
+  right: 14px;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(8px);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  z-index: 9999;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  transition: all 0.2s ease;
+}
+
+.desktop-floating-switch-btn:hover {
+  background: #0284c7;
+  color: #ffffff;
 }
 
 .phone-simulator-wrapper {
@@ -6548,7 +6614,7 @@ html, body, #root {
 .citizen-top-header {
   background: #111827;
   color: #ffffff;
-  padding: 12px 16px 20px;
+  padding: calc(var(--safe-top) + 8px) 16px 20px;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -6607,7 +6673,7 @@ html, body, #root {
 .citizen-content-scroll {
   flex: 1;
   overflow-y: auto;
-  padding: 14px 14px 80px;
+  padding: 14px 14px calc(var(--safe-bottom) + 80px);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -6769,13 +6835,13 @@ html, body, #root {
   bottom: 0;
   left: 0;
   right: 0;
-  height: 48px;
+  height: calc(52px + var(--safe-bottom));
   background: #f1f5f9;
   border-top: 1px solid #e2e8f0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
+  padding: 0 16px var(--safe-bottom);
   z-index: 40;
 }
 
@@ -6820,14 +6886,17 @@ html, body, #root {
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 16px;
-  overflow-y: auto;
+  padding: 0;
+  overflow: hidden;
 }
 
 .live-call-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding: calc(var(--safe-top) + 8px) 16px 12px;
+  background: #111827;
+  flex-shrink: 0;
 }
 
 .live-call-center-visual {
@@ -6915,31 +6984,55 @@ html, body, #root {
   margin-top: 10px;
 }
 
+.call-bottom-controls-row,
 .live-call-bottom-row {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
   margin-top: auto;
-  padding-top: 16px;
+  padding: 12px 14px calc(var(--safe-bottom) + 12px);
+  background: #0a0d14;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+  z-index: 50;
 }
 
+.btn-call-action-dark,
+.btn-call-action-red,
 .call-bottom-action-btn {
   background: #1f2937;
   border: 1px solid rgba(255, 255, 255, 0.1);
   color: #ffffff;
   padding: 10px 4px;
-  border-radius: 10px;
+  border-radius: 12px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  font-size: 0.68rem;
+  justify-content: center;
+  gap: 5px;
+  font-size: 0.72rem;
+  font-weight: 700;
   cursor: pointer;
+  min-height: 52px;
+  transition: all 0.15s ease;
 }
 
+.btn-call-action-dark {
+  background: #1e293b;
+  color: #f8fafc;
+}
+
+.btn-call-action-dark.active {
+  background: #dc2626 !important;
+  color: #ffffff;
+  border-color: #ef4444;
+}
+
+.btn-call-action-red,
 .call-bottom-action-btn.end-call {
   background: #b91c1c;
-  border-color: #b91c1c;
+  color: #ffffff;
+  border-color: #ef4444;
 }
 
 /* ======================================================== */
@@ -6948,7 +7041,7 @@ html, body, #root {
 .silent-chat-header {
   background: #1e293b;
   color: #ffffff;
-  padding: 10px 14px;
+  padding: calc(var(--safe-top) + 8px) 14px 10px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -6970,11 +7063,22 @@ html, body, #root {
 .silent-chat-messages-scroll {
   flex: 1;
   overflow-y: auto;
-  padding: 12px;
+  padding: 12px 12px calc(var(--safe-bottom) + 20px);
   display: flex;
   flex-direction: column;
   gap: 10px;
   background: #f8fafc;
+}
+
+.chat-bottom-input-bar {
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px calc(var(--safe-bottom) + 10px);
+  background: #ffffff;
+  border-top: 1px solid #e2e8f0;
+  align-items: center;
+  flex-shrink: 0;
+  z-index: 50;
 }
 
 .bubble-user-blue {
@@ -7052,14 +7156,23 @@ html, body, #root {
 /* ======================================================== */
 /* PAGE 4: STRUCTURED CONFIRMATION ("Is this right?")       */
 /* ======================================================== */
+.confirm-top-header {
+  padding-top: calc(var(--safe-top) + 8px) !important;
+  flex-shrink: 0;
+}
+
 .confirm-step-container {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 14px;
+  padding: 14px 14px calc(var(--safe-bottom) + 36px);
   background: #f8fafc;
   flex: 1;
   overflow-y: auto;
+}
+
+.confirm-bottom-actions {
+  padding-bottom: calc(var(--safe-bottom) + 10px);
 }
 
 .verified-card-item {
@@ -7112,15 +7225,21 @@ html, body, #root {
   height: 100%;
   background: #f8fafc;
   overflow-y: auto;
+  padding-bottom: calc(var(--safe-bottom) + 36px);
 }
 
 .docket-dark-header {
   background: #111827;
   color: #ffffff;
-  padding: 14px 16px 20px;
+  padding: calc(var(--safe-top) + 8px) 16px 20px;
   display: flex;
   flex-direction: column;
   gap: 6px;
+  flex-shrink: 0;
+}
+
+.case-bottom-actions {
+  padding-bottom: calc(var(--safe-bottom) + 10px);
 }
 
 .case-id-yellow-large {
