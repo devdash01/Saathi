@@ -15,7 +15,6 @@ import {
   Radio
 } from 'lucide-react';
 import { speechService, cleanDuplicateSpeech, assembleSpeechResults } from '../services/speechRecognitionService';
-import { transcribeAudioWithSarvam, MicrophoneRecorder } from '../services/sarvamService';
 import { TacticalEmergencyMap } from './TacticalEmergencyMap';
 import { deviceLocationService } from '../services/deviceLocationService';
 import type { EmergencyServiceEntity } from '../services/locationService';
@@ -79,7 +78,6 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
   // Live Speech Recognition Voice Input State
   const [isVoiceListening, setIsVoiceListening] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
-  const micRecorderRef = useRef<MicrophoneRecorder | null>(null);
 
   // Transcript state - STARTS CLEAN WITH ZERO HARDCODING
   const [transcript, setTranscript] = useState<string>(currentInputText || '');
@@ -251,7 +249,7 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
         }
       },
       (err) => {
-        console.warn('Speech recognition warning:', err);
+        console.warn('Sarvam AI Speech recognition error:', err);
         setVoiceError('Voice input error. You can also type your message.');
         setSarvamStatus('error');
       },
@@ -264,43 +262,11 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
           );
           currentVoiceMessageIdRef.current = null;
         }
-        // Auto-transcribe finished voice segment with Sarvam AI
-        if (micRecorderRef.current && micRecorderRef.current.isRecording()) {
-          micRecorderRef.current.stop().then((blob) => {
-            const url = URL.createObjectURL(blob);
-            transcribeAudioWithSarvam(blob, 'codemix').then((res) => {
-              if (res.transcript) {
-                const sarvamSpoken = cleanDuplicateSpeech(res.transcript);
-                if (sarvamSpoken) {
-                  const baseText = transcriptRef.current ? cleanDuplicateSpeech(transcriptRef.current.trim()) : '';
-                  const accumulated = cleanDuplicateSpeech(baseText ? assembleSpeechResults([baseText, sarvamSpoken]) : sarvamSpoken);
-                  setTranscript(accumulated);
-                  transcriptRef.current = accumulated;
-                  onUserInputChange(accumulated, undefined, url);
-                }
-              }
-            }).catch(() => {});
-          }).catch(() => {});
-          micRecorderRef.current = null;
-        }
       }
     );
 
-    // Start Sarvam AI audio recorder alongside live recognition
-    try {
-      const recorder = new MicrophoneRecorder();
-      recorder.start().then(() => {
-        micRecorderRef.current = recorder;
-      }).catch((e) => {
-        console.warn('MicrophoneRecorder error:', e);
-      });
-    } catch (_e) {}
-
     if (started) {
       setIsVoiceListening(true);
-    } else {
-      // Fallback: Use MediaRecorder if browser Web Speech API is not enabled
-      startMediaRecorderFallback();
     }
   }, [isWhisperMode, onUserInputChange, setSarvamStatus]);
 
@@ -314,41 +280,8 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
       );
       currentVoiceMessageIdRef.current = null;
     }
-    if (micRecorderRef.current && micRecorderRef.current.isRecording()) {
-      micRecorderRef.current.stop().then((blob) => {
-        const url = URL.createObjectURL(blob);
-        setSarvamStatus('transcribing');
-        transcribeAudioWithSarvam(blob, 'codemix').then((res) => {
-          setSarvamStatus('connected');
-          if (res.transcript) {
-            const sarvamSpoken = cleanDuplicateSpeech(res.transcript);
-            if (sarvamSpoken) {
-              const baseText = transcriptRef.current ? cleanDuplicateSpeech(transcriptRef.current.trim()) : '';
-              const accumulated = cleanDuplicateSpeech(baseText ? assembleSpeechResults([baseText, sarvamSpoken]) : sarvamSpoken);
-              setTranscript(accumulated);
-              transcriptRef.current = accumulated;
-              onUserInputChange(accumulated, undefined, url);
-            }
-          }
-        }).catch((err) => {
-          console.warn('Sarvam transcription warning:', err);
-          setSarvamStatus('connected');
-        });
-      }).catch(() => {});
-      micRecorderRef.current = null;
-    }
-  }, [onUserInputChange, setSarvamStatus]);
+  }, []);
 
-  const startMediaRecorderFallback = async () => {
-    try {
-      const recorder = new MicrophoneRecorder();
-      await recorder.start();
-      micRecorderRef.current = recorder;
-      setIsVoiceListening(true);
-    } catch (_e) {
-      setVoiceError('Microphone permission denied. Please enable mic in browser settings.');
-    }
-  };
 
   const handleToggleVoiceInput = () => {
     if (isVoiceListening) {
