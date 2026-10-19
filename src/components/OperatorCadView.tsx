@@ -197,9 +197,12 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
       {/* ======================================================== */}
       <header className="cad-top-header-181">
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <span style={{ fontSize: '0.84rem', fontWeight: 800, letterSpacing: '0.02em', color: '#ffffff' }}>
-            SAATHI <span style={{ color: '#94a3b8', fontWeight: 400 }}>181 Women Helpline · Delhi CRC</span>
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <img src="/logo.png" alt="Saathi" style={{ width: 26, height: 26, borderRadius: 6, objectFit: 'contain' }} />
+            <span style={{ fontSize: '0.84rem', fontWeight: 800, letterSpacing: '0.02em', color: '#ffffff' }}>
+              SAATHI <span style={{ color: '#94a3b8', fontWeight: 400 }}>181 Women Helpline · Delhi CRC</span>
+            </span>
+          </div>
 
           <nav className="cad-nav-tabs-181">
             <button

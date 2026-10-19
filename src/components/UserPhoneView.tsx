@@ -451,7 +451,10 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
             <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#f2f4f8' }}>
               <div className="citizen-top-header">
                 <div className="citizen-header-row">
-                  <span className="citizen-brand-tag">SAATHI 181</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <img src="/logo.png" alt="Saathi" style={{ width: 26, height: 26, borderRadius: 6, objectFit: 'contain' }} />
+                    <span className="citizen-brand-tag">SAATHI 181</span>
+                  </div>
                   <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                     {(transcript || messages.length > 0) && (
                       <button

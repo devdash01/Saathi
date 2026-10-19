@@ -1020,6 +1020,7 @@ export function App() {
       {viewMode !== 'phone' && (
         <header className="global-app-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <img src="/logo.png" alt="Saathi" style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'contain' }} />
             <span className="brand-logo-badge">SAATHI 112</span>
             <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#94a3b8' }}>
               Emergency Response & CAD Platform
