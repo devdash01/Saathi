@@ -1,5 +1,6 @@
 package com.saathi.emergency;
 
+import android.app.KeyguardManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -29,41 +30,60 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        unlockAndTurnScreenOn();
         super.onCreate(savedInstanceState);
 
-        // Allow app to display over lockscreen and turn on screen in emergency
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-            setShowWhenLocked(true);
-            setTurnScreenOn(true);
-        } else {
-            getWindow().addFlags(
-                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED |
-                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD |
-                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON |
-                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
-            );
-        }
-
-        // Attach native bridge to WebView once bridge is ready
+        // Attach native bridge to WebView once ready
         mainHandler.postDelayed(this::setupNativeBridge, 800);
 
         handleIntent(getIntent());
     }
 
     @Override
+    public void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        unlockAndTurnScreenOn();
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        unlockAndTurnScreenOn();
+    }
+
+    private void unlockAndTurnScreenOn() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                setShowWhenLocked(true);
+                setTurnScreenOn(true);
+                KeyguardManager km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
+                if (km != null) {
+                    km.requestDismissKeyguard(this, null);
+                }
+            }
+            getWindow().addFlags(
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED |
+                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD |
+                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON |
+                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+            );
+        } catch (Exception ignored) {}
+    }
+
+    @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
+        unlockAndTurnScreenOn();
         handleIntent(intent);
     }
 
     private void handleIntent(Intent intent) {
         if (intent != null && intent.getBooleanExtra("START_MIC_TRIGGER", false)) {
             isPendingMicTrigger = true;
-            // Schedule mic trigger attempts to guarantee delivery when WebView finishes rendering
             deliverPendingMicTrigger();
-            mainHandler.postDelayed(this::deliverPendingMicTrigger, 600);
-            mainHandler.postDelayed(this::deliverPendingMicTrigger, 1500);
+            mainHandler.postDelayed(this::deliverPendingMicTrigger, 500);
+            mainHandler.postDelayed(this::deliverPendingMicTrigger, 1200);
         }
     }
 
@@ -130,10 +150,6 @@ public class MainActivity extends BridgeActivity {
             long now = System.currentTimeMillis();
 
             if (action == KeyEvent.ACTION_DOWN) {
-                if (event.getRepeatCount() > 0) {
-                    return true;
-                }
-
                 if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
                     isVolumeUpPressed = true;
                     lastVolumeUpTime = now;
@@ -141,23 +157,25 @@ public class MainActivity extends BridgeActivity {
                     isVolumeDownPressed = true;
                     lastVolumeDownTime = now;
                 }
-
-                boolean bothEngaged = (isVolumeUpPressed && isVolumeDownPressed) ||
-                                      (Math.abs(lastVolumeUpTime - lastVolumeDownTime) <= 500);
-
-                if (bothEngaged) {
-                    if (now - lastChordTriggerTime > 350) {
-                        lastChordTriggerTime = now;
-                        triggerMicActivation();
-                    }
-                    return true;
-                }
             } else if (action == KeyEvent.ACTION_UP) {
                 if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
                     isVolumeUpPressed = false;
+                    lastVolumeUpTime = now;
                 } else if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
                     isVolumeDownPressed = false;
+                    lastVolumeDownTime = now;
                 }
+            }
+
+            boolean bothEngaged = (isVolumeUpPressed && isVolumeDownPressed) ||
+                (lastVolumeUpTime > 0 && lastVolumeDownTime > 0 && Math.abs(lastVolumeUpTime - lastVolumeDownTime) <= 1200);
+
+            if (bothEngaged) {
+                if (now - lastChordTriggerTime > 1500) {
+                    lastChordTriggerTime = now;
+                    triggerMicActivation();
+                }
+                return true;
             }
         }
 
@@ -165,7 +183,6 @@ public class MainActivity extends BridgeActivity {
     }
 
     private void triggerMicActivation() {
-        // Crisp tactile feedback
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 VibratorManager vibratorManager = (VibratorManager) getSystemService(Context.VIBRATOR_MANAGER_SERVICE);
@@ -186,7 +203,6 @@ public class MainActivity extends BridgeActivity {
             }
         } catch (Exception ignored) {}
 
-        // Dispatch hardware-mic-trigger event to Capacitor WebView
         runOnUiThread(() -> {
             try {
                 if (bridge != null && bridge.getWebView() != null) {
