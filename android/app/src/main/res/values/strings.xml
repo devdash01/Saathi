@@ -4,4 +4,6 @@
     <string name="title_activity_main">Saathi</string>
     <string name="package_name">com.saathi.emergency</string>
     <string name="custom_url_scheme">com.saathi.emergency</string>
+    <string name="accessibility_service_label">Saathi Emergency Hardware Trigger</string>
+    <string name="accessibility_service_description">Enables Saathi to detect Volume Up and Volume Down pressed together even when the app is closed or in background, instantly opening the distress microphone.</string>
 </resources>

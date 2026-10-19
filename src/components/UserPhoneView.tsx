@@ -92,6 +92,7 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
   const [isLocatingGps, setIsLocatingGps] = useState(false);
   const effectiveAreaShared = isAreaShared || Boolean(isLiveLocationSharing);
   const [hardwareTriggerToast, setHardwareTriggerToast] = useState<string | null>(null);
+  const [isBgTriggerEnabled, setIsBgTriggerEnabled] = useState<boolean | null>(null);
 
   // Page 4 Confirmation input
   const [landmarkInput, setLandmarkInput] = useState('');
@@ -392,6 +393,37 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
     };
   }, [startLiveVoiceRecognition]);
 
+  // Check Accessibility Service status for 24/7 background hardware trigger
+  const checkBgTriggerStatus = useCallback(() => {
+    try {
+      if (typeof window !== 'undefined' && (window as any).SaathiNative?.isAccessibilityEnabled) {
+        const enabled = Boolean((window as any).SaathiNative.isAccessibilityEnabled());
+        setIsBgTriggerEnabled(enabled);
+      }
+    } catch (_e) {}
+  }, []);
+
+  useEffect(() => {
+    checkBgTriggerStatus();
+    const handleFocus = () => checkBgTriggerStatus();
+    window.addEventListener('focus', handleFocus);
+    const interval = setInterval(checkBgTriggerStatus, 3000);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      clearInterval(interval);
+    };
+  }, [checkBgTriggerStatus]);
+
+  const handleOpenAccessibilitySettings = () => {
+    try {
+      if ((window as any).SaathiNative?.openAccessibilitySettings) {
+        (window as any).SaathiNative.openAccessibilitySettings();
+      } else {
+        alert('To enable 24/7 background trigger: Go to Android Settings > Accessibility > Installed apps > Saathi Emergency Hardware Trigger -> Turn ON.');
+      }
+    } catch (_e) {}
+  };
+
   const handleStartNewSessionClick = () => {
     stopLiveVoiceRecognition();
     setTranscript('');
@@ -677,22 +709,75 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
                   </div>
                 </button>
 
-                {/* Hardware Shortcut Info Badge */}
-                <div style={{
-                  background: '#ffffff',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '10px',
-                  padding: '7px 11px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  fontSize: '0.68rem',
-                  color: '#475569',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
-                }}>
-                  <span style={{ fontSize: '0.85rem' }}>⚡</span>
-                  <span><strong>Instant Mic Shortcut:</strong> Double-press <strong>Volume Up &amp; Down</strong> buttons together anytime to speak immediately.</span>
-                </div>
+                {/* Hardware Shortcut Info & 24/7 Background Status */}
+                {isBgTriggerEnabled === false ? (
+                  <div style={{
+                    background: '#eff6ff',
+                    border: '1.5px solid #60a5fa',
+                    borderRadius: '10px',
+                    padding: '10px 12px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '6px'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '0.9rem' }}>🛡️</span>
+                      <span style={{ fontSize: '0.74rem', fontWeight: 800, color: '#1e40af' }}>
+                        Enable 24/7 Background Volume Trigger
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '0.67rem', color: '#334155', lineHeight: 1.35 }}>
+                      To trigger the mic anytime even when the app is closed or locked, turn ON Saathi in Android Accessibility settings.
+                    </div>
+                    <button
+                      onClick={handleOpenAccessibilitySettings}
+                      style={{
+                        background: '#2563eb',
+                        color: '#ffffff',
+                        border: 'none',
+                        borderRadius: '6px',
+                        padding: '6px 10px',
+                        fontSize: '0.7rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        alignSelf: 'flex-start'
+                      }}
+                    >
+                      Open Android Accessibility Settings →
+                    </button>
+                  </div>
+                ) : isBgTriggerEnabled === true ? (
+                  <div style={{
+                    background: '#f0fdf4',
+                    border: '1px solid #86efac',
+                    borderRadius: '8px',
+                    padding: '6px 10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontSize: '0.67rem',
+                    color: '#166534'
+                  }}>
+                    <span>✅</span>
+                    <span><strong>24/7 Background Trigger Active:</strong> Press Volume Up &amp; Down together anytime (even if app is closed) to open mic.</span>
+                  </div>
+                ) : (
+                  <div style={{
+                    background: '#ffffff',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '10px',
+                    padding: '7px 11px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    fontSize: '0.68rem',
+                    color: '#475569',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+                  }}>
+                    <span style={{ fontSize: '0.85rem' }}>⚡</span>
+                    <span><strong>Instant Mic Shortcut:</strong> Double-press <strong>Volume Up &amp; Down</strong> buttons together anytime to speak immediately.</span>
+                  </div>
+                )}
 
                 {/* 1. Call 181 Card */}
                 <button onClick={() => { setActiveScreen('call'); setCallSeconds(0); }} className="call-181-card">
