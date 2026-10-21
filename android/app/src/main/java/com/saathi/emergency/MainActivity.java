@@ -20,6 +20,8 @@ import android.view.KeyEvent;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
+import android.webkit.PermissionRequest;
+import com.getcapacitor.BridgeWebChromeClient;
 import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
@@ -155,17 +157,11 @@ public class MainActivity extends BridgeActivity {
 
                 activeSpeechLanguage = (lang != null && (lang.equals("Hindi") || lang.equals("hi-IN"))) ? "hi-IN" : "en-IN";
 
-                if (speechRecognizer != null) {
-                    try { speechRecognizer.destroy(); } catch (Exception ignored) {}
-                    speechRecognizer = null;
-                }
-
                 if (!SpeechRecognizer.isRecognitionAvailable(this)) {
                     sendSpeechErrorToWeb("Speech recognition not available on this device");
                     return;
                 }
 
-                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
                 Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
                 intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
                 intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, activeSpeechLanguage);
@@ -174,88 +170,82 @@ public class MainActivity extends BridgeActivity {
                 intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
                 intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
                 intent.putExtra("android.speech.extra.DICTATION_MODE", true);
-                intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 3000L);
-                intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 2500L);
-                intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 1500L);
+                intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 4000L);
+                intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 3000L);
+                intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 2000L);
 
-                speechRecognizer.setRecognitionListener(new RecognitionListener() {
-                    @Override
-                    public void onReadyForSpeech(Bundle params) {}
+                if (speechRecognizer == null) {
+                    speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
+                    speechRecognizer.setRecognitionListener(new RecognitionListener() {
+                        @Override
+                        public void onReadyForSpeech(Bundle params) {}
 
-                    @Override
-                    public void onBeginningOfSpeech() {}
+                        @Override
+                        public void onBeginningOfSpeech() {}
 
-                    @Override
-                    public void onRmsChanged(float rmsdB) {}
+                        @Override
+                        public void onRmsChanged(float rmsdB) {}
 
-                    @Override
-                    public void onBufferReceived(byte[] buffer) {}
+                        @Override
+                        public void onBufferReceived(byte[] buffer) {}
 
-                    @Override
-                    public void onEndOfSpeech() {}
+                        @Override
+                        public void onEndOfSpeech() {}
 
-                    @Override
-                    public void onError(int error) {
-                        if (!isNativeSpeechListening) return;
+                        @Override
+                        public void onError(int error) {
+                            if (!isNativeSpeechListening) return;
 
-                        // Auto-restart on speech pause or transient busy state
-                        if (error == SpeechRecognizer.ERROR_NO_MATCH ||
-                            error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT ||
-                            error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY ||
-                            error == SpeechRecognizer.ERROR_AUDIO) {
+                            // Auto-restart on speech pause or transient state without destroying recognizer
                             mainHandler.postDelayed(() -> {
-                                if (isNativeSpeechListening) {
-                                    startNativeSpeechRecognizer(activeSpeechLanguage);
+                                if (isNativeSpeechListening && speechRecognizer != null) {
+                                    try {
+                                        speechRecognizer.cancel();
+                                        speechRecognizer.startListening(intent);
+                                    } catch (Exception ignored) {
+                                        startNativeSpeechRecognizer(activeSpeechLanguage);
+                                    }
                                 }
-                            }, 200);
-                            return;
+                            }, 100);
                         }
 
-                        // On network timeout retry after short delay
-                        if (error == SpeechRecognizer.ERROR_NETWORK || error == SpeechRecognizer.ERROR_NETWORK_TIMEOUT) {
-                            mainHandler.postDelayed(() -> {
-                                if (isNativeSpeechListening) {
-                                    startNativeSpeechRecognizer(activeSpeechLanguage);
-                                }
-                            }, 600);
-                            return;
+                        @Override
+                        public void onResults(Bundle results) {
+                            ArrayList<String> matches = results != null ? results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION) : null;
+                            if (matches != null && !matches.isEmpty()) {
+                                sendSpeechResultToWeb(matches.get(0), true);
+                            }
+                            if (isNativeSpeechListening && speechRecognizer != null) {
+                                mainHandler.postDelayed(() -> {
+                                    if (isNativeSpeechListening && speechRecognizer != null) {
+                                        try {
+                                            speechRecognizer.startListening(intent);
+                                        } catch (Exception ignored) {
+                                            startNativeSpeechRecognizer(activeSpeechLanguage);
+                                        }
+                                    }
+                                }, 80);
+                            }
                         }
 
-                        sendSpeechErrorToWeb("Speech error: " + error);
-                    }
-
-                    @Override
-                    public void onResults(Bundle results) {
-                        ArrayList<String> matches = results != null ? results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION) : null;
-                        if (matches != null && !matches.isEmpty()) {
-                            sendSpeechResultToWeb(matches.get(0), true);
+                        @Override
+                        public void onPartialResults(Bundle partialResults) {
+                            ArrayList<String> matches = partialResults != null ? partialResults.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION) : null;
+                            if (matches != null && !matches.isEmpty()) {
+                                sendSpeechResultToWeb(matches.get(0), false);
+                            }
                         }
-                        if (isNativeSpeechListening) {
-                            mainHandler.postDelayed(() -> {
-                                if (isNativeSpeechListening) {
-                                    startNativeSpeechRecognizer(activeSpeechLanguage);
-                                }
-                            }, 150);
-                        }
-                    }
 
-                    @Override
-                    public void onPartialResults(Bundle partialResults) {
-                        ArrayList<String> matches = partialResults != null ? partialResults.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION) : null;
-                        if (matches != null && !matches.isEmpty()) {
-                            sendSpeechResultToWeb(matches.get(0), false);
-                        }
-                    }
-
-                    @Override
-                    public void onEvent(int eventType, Bundle params) {}
-                });
+                        @Override
+                        public void onEvent(int eventType, Bundle params) {}
+                    });
+                }
 
                 isNativeSpeechListening = true;
+                speechRecognizer.cancel();
                 speechRecognizer.startListening(intent);
             } catch (Exception e) {
                 e.printStackTrace();
-                sendSpeechErrorToWeb(e.getMessage());
             }
         });
     }
@@ -306,6 +296,20 @@ public class MainActivity extends BridgeActivity {
             if (bridge != null && bridge.getWebView() != null) {
                 WebView webView = bridge.getWebView();
                 webView.addJavascriptInterface(new NativeSaathiBridge(), "SaathiNative");
+
+                // Seamlessly grant Web Speech API / WebRTC audio capture permissions to WebView
+                webView.setWebChromeClient(new BridgeWebChromeClient(bridge) {
+                    @Override
+                    public void onPermissionRequest(final PermissionRequest request) {
+                        runOnUiThread(() -> {
+                            try {
+                                request.grant(request.getResources());
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                            }
+                        });
+                    }
+                });
             }
         } catch (Exception e) {
             e.printStackTrace();

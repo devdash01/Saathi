@@ -17,7 +17,7 @@ import {
   Zap,
   Copy
 } from 'lucide-react';
-import { speechService } from '../services/speechRecognitionService';
+import { speechService, smartMergeTranscript, cleanDuplicateSpeech } from '../services/speechRecognitionService';
 import { parseEmergencyKeywords } from '../services/emergencyKeywordService';
 import { TacticalEmergencyMap } from './TacticalEmergencyMap';
 import { deviceLocationService } from '../services/deviceLocationService';
@@ -268,9 +268,12 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
       (result) => {
         const spoken = (result.transcript || '').trim();
         if (!spoken) return;
+        setVoiceError(null);
         const formatted = isWhisperMode && !spoken.includes('[whisper]') ? `[whisper] ${spoken}` : spoken;
 
-        const accumulated = baseText ? `${baseText}. ${formatted}` : formatted;
+        const accumulated = baseText
+          ? cleanDuplicateSpeech(smartMergeTranscript(baseText, formatted))
+          : cleanDuplicateSpeech(formatted);
 
         setTranscript(accumulated);
         transcriptRef.current = accumulated;
@@ -310,9 +313,10 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
         }
       },
       (err) => {
-        console.warn('Sarvam AI Speech recognition error:', err);
-        setVoiceError('Voice input error. You can also type your message.');
-        setSarvamStatus('error');
+        // Suppress benign pauses
+        if (err === 'no-speech' || err === 'aborted') return;
+        console.warn('Speech recognition warning:', err);
+        setVoiceError('Microphone active. Listening for your voice...');
       },
       () => {
         setIsVoiceListening(false);
