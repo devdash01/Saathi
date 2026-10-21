@@ -61,6 +61,7 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
   inputText,
   translatedText: _translatedText,
   extractedLocation,
+  isExtractedFromSpeech,
   callerCoords,
   nearbyServices,
   audioUrl: _audioUrl,
@@ -1068,7 +1069,11 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
               <div style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <div style={{ background: '#fef3c7', border: '1px solid #fde68a', borderRadius: '4px', padding: '4px 8px', fontSize: '0.66rem' }}>
                   <div style={{ fontWeight: 800, color: '#92400e' }}>
-                    CELL AREA · {isLocationConfirmed ? '±20 m (GPS Precision)' : '±600 m (Tower Area)'}
+                    {isLocationConfirmed
+                      ? 'GPS FIX · ±20 m (Hardware GPS)'
+                      : isExtractedFromSpeech
+                      ? 'SPOKEN LOCALITY · ±1.5 km (Speech Extracted Estimate)'
+                      : 'CELL TOWER · ±600 m (Triangulation Area)'}
                   </div>
                   <div style={{ color: '#78350f' }}>{extractedLocation || 'Paschim Vihar, A-4 block, New Delhi'}</div>
                 </div>
@@ -1080,6 +1085,8 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
                     nearbyServices={nearbyServices}
                     policeDispatched={agencies?.police?.status === 'DISPATCHED'}
                     medicalDispatched={agencies?.medical?.status === 'DISPATCHED'}
+                    accuracyMeters={activeReport?.location?.accuracyMeters || (isExtractedFromSpeech ? 1500 : 20)}
+                    locationSource={activeReport?.location?.source || (isExtractedFromSpeech ? 'speech_extracted' : 'live_gps')}
                   />
                 </div>
 

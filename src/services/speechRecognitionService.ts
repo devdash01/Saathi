@@ -145,17 +145,13 @@ export class UniversalSpeechRecognitionService {
         this.acc.commit(); // keep anything pending
         this.emit(true);
         if (this.isListeningState) {
-          try {
-            this.recognition.start();
-          } catch (_e) {
-            setTimeout(() => {
-              if (this.isListeningState && this.recognition) {
-                try {
-                  this.recognition.start();
-                } catch (_err) {}
-              }
-            }, 60);
-          }
+          setTimeout(() => {
+            if (this.isListeningState && this.recognition) {
+              try {
+                this.recognition.start();
+              } catch (_err) {}
+            }
+          }, 100);
         } else if (this.onEndCallback) {
           this.onEndCallback();
         }

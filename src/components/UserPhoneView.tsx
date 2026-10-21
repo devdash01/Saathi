@@ -30,7 +30,7 @@ export type CitizenScreenName = 'landing' | 'call' | 'chat' | 'confirm' | 'case'
 
 interface UserPhoneViewProps {
   currentInputText: string;
-  onUserInputChange: (text: string, contextHint?: string, audioUrl?: string) => void;
+  onUserInputChange: (text: string, contextHint?: string, audioUrl?: string, isFinal?: boolean) => void;
   extractedLocation: string;
   callerCoords: [number, number];
   questions: SafeSignalQuestion[];
@@ -270,7 +270,7 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
 
         setTranscript(spoken);
         transcriptRef.current = spoken;
-        onUserInputChange(spoken);
+        onUserInputChange(spoken, undefined, undefined, result.isFinal);
         setSarvamStatus('connected');
 
         if (spoken) {

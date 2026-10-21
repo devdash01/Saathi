@@ -11,6 +11,8 @@ interface TacticalMapProps {
   nearbyServices?: EmergencyServiceEntity[];
   policeDispatched: boolean;
   medicalDispatched: boolean;
+  accuracyMeters?: number;
+  locationSource?: string;
 }
 
 const DEFAULT_COORDS: [number, number] = [28.7153, 77.1147];
@@ -20,7 +22,9 @@ export const TacticalEmergencyMap: React.FC<TacticalMapProps> = ({
   locationAddress,
   nearbyServices = [],
   policeDispatched,
-  medicalDispatched
+  medicalDispatched,
+  accuracyMeters,
+  locationSource
 }) => {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -79,14 +83,34 @@ export const TacticalEmergencyMap: React.FC<TacticalMapProps> = ({
     });
 
     const callerMarker = L.marker(effectiveCallerCoords, { icon: callerIcon }).addTo(map);
+    const isSpeechLoc = locationSource === 'speech_extracted';
+    const radiusMeters = accuracyMeters || (isSpeechLoc ? 1500 : 20);
+    const accuracyLabel = isSpeechLoc ? `±${(radiusMeters / 1000).toFixed(1)} km (Speech Locality Estimate)` : `±${radiusMeters} m (Device GPS)`;
+
     callerMarker.bindPopup(`
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 12px; color: #0f172a;">
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 12px; color: #0f172a; min-width: 180px;">
         <strong style="color: #ef4444; text-transform: uppercase; letter-spacing: 0.05em;">Incident Target Location</strong><br/>
         <span>${locationAddress}</span><br/>
-        <span style="font-size: 11px; color: #64748b; font-family: monospace;">GPS: ${effectiveCallerCoords[0].toFixed(4)}, ${effectiveCallerCoords[1].toFixed(4)}</span>
+        <span style="font-size: 11px; color: #64748b; font-family: monospace;">Coords: ${effectiveCallerCoords[0].toFixed(4)}, ${effectiveCallerCoords[1].toFixed(4)}</span><br/>
+        <span style="display: inline-block; margin-top: 4px; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 3px; background: ${isSpeechLoc ? '#fef3c7' : '#dcfce7'}; color: ${isSpeechLoc ? '#92400e' : '#166534'};">
+          ${accuracyLabel}
+        </span>
       </div>
     `);
     markersRef.current.push(callerMarker);
+
+    // Accuracy Perimeter Circle
+    if (radiusMeters > 0) {
+      const circle = L.circle(effectiveCallerCoords, {
+        radius: radiusMeters,
+        color: isSpeechLoc ? '#f59e0b' : '#3b82f6',
+        dashArray: isSpeechLoc ? '6, 6' : undefined,
+        weight: 1.5,
+        fillColor: isSpeechLoc ? '#f59e0b' : '#3b82f6',
+        fillOpacity: 0.06
+      }).addTo(map);
+      markersRef.current.push(circle as any);
+    }
 
     // 2. Nearby Emergency Services Markers
     nearbyServices.forEach((srv) => {

@@ -95,6 +95,11 @@ export function App() {
   const [dispatchAlertToast, setDispatchAlertToast] = useState<string | null>(null);
   const translationDebounceRef = useRef<number | null>(null);
   const syncDebounceRef = useRef<number | null>(null);
+  const lastInputTextRef = useRef<string>('');
+  const latestReportRef = useRef<EmergencyReport>(activeReport);
+  useEffect(() => {
+    latestReportRef.current = activeReport;
+  }, [activeReport]);
 
   // Cloud Real-Time Sync State (Mobile Data & Global Cross-Device Link)
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('disconnected');
@@ -196,9 +201,12 @@ export function App() {
       audioUrl?: string,
       isRemoteSync: boolean = false,
       remoteLocation?: EmergencyReport['location'],
-      remoteNearbyServices?: EmergencyServiceEntity[]
+      remoteNearbyServices?: EmergencyServiceEntity[],
+      isFinal: boolean = true
     ) => {
       if (!text || text.trim().length === 0) return;
+      if (text === lastInputTextRef.current && !isFinal) return;
+      lastInputTextRef.current = text;
 
       // A. Instantly extract locality & resolve coordinates + nearby services (0ms synchronous)
       const loc = extractLocationFromSpeech(text, contextHint);
@@ -260,92 +268,80 @@ export function App() {
         }
       };
 
-      // C. Construct updated report object
-      const updatedReport: EmergencyReport = {
-        ...activeReport,
-        id: activeReport.id || `REP-${Date.now().toString().slice(-6)}`,
-        idempotencyKey: `idemp-${Date.now()}`,
-        updatedAt: new Date().toISOString(),
-        callerText: text,
-        translatedText: activeReport.translatedText && activeReport.callerText === text ? activeReport.translatedText : text,
-        audioUrl: audioUrl || activeReport.audioUrl,
-        location: {
-          address: resolvedAddress,
-          coords,
-          accuracyMeters: loc.isFound ? 20 : activeReport.location.accuracyMeters || 15,
-          isLiveStreaming: activeReport.location.isLiveStreaming,
-          source: loc.isFound ? 'speech_extracted' : (activeReport.location.source || 'speech_extracted'),
-          lastUpdated: new Date().toISOString()
-        },
-        triage: analysis.triage,
-        safetyFloor: analysis.safetyFloor,
-        aiConfidence: analysis.aiConfidence,
-        urgencyLevel: analysis.triage.urgencyLevel,
-        questions: dynamicQuestions,
-        agencies: updatedAgencies,
-        auditTrail: [
-          ...activeReport.auditTrail,
-          {
-            id: `audit-${Date.now()}`,
-            timestamp: new Date().toISOString(),
-            actor: 'citizen',
-            action: 'INPUT_APPENDED',
-            details: `Caller provided additional report details: "${text.substring(0, 50)}..."`
-          }
-        ]
-      };
+      // C & D. SYNCHRONOUS STATE UPDATE: Triggers immediate re-render of Map, Questions, and Triage
+      setActiveReport((prev) => {
+        const isLocSpeech = loc.isFound;
+        const accuracyMeters = isLocSpeech
+          ? 1500
+          : (prev.location?.source === 'live_gps' ? (prev.location?.accuracyMeters || 15) : 1500);
+        const locationSource = isLocSpeech
+          ? 'speech_extracted'
+          : (prev.location?.source || 'speech_extracted');
 
-      // D. SYNCHRONOUS STATE UPDATE: Triggers immediate re-render of Map, Questions, and Triage
-      setActiveReport((prev) => ({
-        ...prev,
-        id: prev.id || updatedReport.id,
-        updatedAt: new Date().toISOString(),
-        callerText: text,
-        translatedText: prev.translatedText && prev.callerText === text ? prev.translatedText : text,
-        audioUrl: audioUrl || prev.audioUrl,
-        location: {
-          address: resolvedAddress,
-          coords,
-          accuracyMeters: loc.isFound ? 20 : prev.location?.accuracyMeters || 15,
-          isLiveStreaming: prev.location?.isLiveStreaming,
-          source: loc.isFound ? 'speech_extracted' : (prev.location?.source || 'speech_extracted'),
-          lastUpdated: new Date().toISOString()
-        },
-        triage: analysis.triage,
-        safetyFloor: analysis.safetyFloor,
-        aiConfidence: analysis.aiConfidence,
-        urgencyLevel: analysis.triage.urgencyLevel,
-        questions: dynamicQuestions,
-        agencies: updatedAgencies,
-        auditTrail: [
-          ...prev.auditTrail,
-          {
-            id: `audit-${Date.now()}`,
-            timestamp: new Date().toISOString(),
-            actor: 'citizen',
-            action: 'INPUT_APPENDED',
-            details: `Caller provided additional report details: "${text.substring(0, 50)}..."`
-          }
-        ]
-      }));
-      setNearbyServices(instantGeo.nearbyServices);
-      setAllReports((prev) => {
-        const idx = prev.findIndex((r) => r.id === updatedReport.id);
-        if (idx >= 0) {
-          const next = [...prev];
-          next[idx] = updatedReport;
-          return next;
-        }
-        return [updatedReport, ...prev];
+        // Only record audit entry on finalized commits when text actually changed
+        const shouldAddAudit = isFinal && prev.callerText !== text;
+        const updatedAuditTrail = shouldAddAudit
+          ? [
+              ...prev.auditTrail,
+              {
+                id: `audit-${Date.now()}`,
+                timestamp: new Date().toISOString(),
+                actor: 'citizen' as const,
+                action: 'INPUT_APPENDED' as const,
+                details: `Caller provided additional report details: "${text.substring(0, 50)}..."`
+              }
+            ]
+          : prev.auditTrail;
+
+        const nextReport: EmergencyReport = {
+          ...prev,
+          id: prev.id || `REP-${Date.now().toString().slice(-6)}`,
+          idempotencyKey: `idemp-${Date.now()}`,
+          updatedAt: new Date().toISOString(),
+          callerText: text,
+          translatedText: prev.translatedText && prev.callerText === text ? prev.translatedText : text,
+          audioUrl: audioUrl || prev.audioUrl,
+          location: {
+            address: resolvedAddress,
+            coords,
+            accuracyMeters,
+            isLiveStreaming: prev.location?.isLiveStreaming,
+            source: locationSource,
+            lastUpdated: new Date().toISOString()
+          },
+          triage: analysis.triage,
+          safetyFloor: analysis.safetyFloor,
+          aiConfidence: analysis.aiConfidence,
+          urgencyLevel: analysis.triage.urgencyLevel,
+          questions: dynamicQuestions,
+          agencies: updatedAgencies,
+          auditTrail: updatedAuditTrail
+        };
+
+        latestReportRef.current = nextReport;
+        return nextReport;
       });
 
-      // E & F. Debounce heavy background persistence & network broadcasts so live speech rendering is 0ms instant
+      setNearbyServices(instantGeo.nearbyServices);
+      setAllReports((prev) => {
+        const currentReport = latestReportRef.current;
+        const idx = prev.findIndex((r) => r.id === currentReport.id);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = currentReport;
+          return next;
+        }
+        return [currentReport, ...prev];
+      });
+
+      // E & F. Debounce heavy background persistence & network broadcasts using latest ref
       if (syncDebounceRef.current) {
         window.clearTimeout(syncDebounceRef.current);
       }
       syncDebounceRef.current = window.setTimeout(() => {
-        reportStorageService.saveReportLocally(updatedReport).catch(console.warn);
-        networkDeliveryService.submitReport(updatedReport).catch(console.warn);
+        const reportToPersist = latestReportRef.current;
+        reportStorageService.saveReportLocally(reportToPersist).catch(console.warn);
+        networkDeliveryService.submitReport(reportToPersist).catch(console.warn);
 
         // Cloud real-time sync broadcast to paired CAD / Phone consoles across mobile data
         if (!isRemoteSync) {
@@ -354,7 +350,7 @@ export function App() {
             contextHint,
             audioUrl,
             callerAnswers,
-            location: updatedReport.location,
+            location: reportToPersist.location,
             nearbyServices: instantGeo.nearbyServices
           });
         }
@@ -876,6 +872,8 @@ export function App() {
       retryCount: 0
     };
 
+    lastInputTextRef.current = '';
+    latestReportRef.current = newReport;
     setCallerAnswers({});
     setActiveReport(newReport);
     setAllReports((prev) => [newReport, ...prev]);
