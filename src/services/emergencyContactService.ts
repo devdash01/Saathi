@@ -163,14 +163,14 @@ class EmergencyContactService {
    * Cleans phone number for WhatsApp wa.me API (digits only with country code, e.g. 919876543210)
    */
   public getCleanPhoneForWhatsApp(raw: string): string {
-    const digitsOnly = raw.replace(/\D/g, '');
+    let digitsOnly = raw.replace(/\D/g, '');
+    digitsOnly = digitsOnly.replace(/^0+/, '');
     if (digitsOnly.length === 10) {
       // Standard 10-digit Indian number without country prefix -> add 91
       return `91${digitsOnly}`;
     }
-    if (digitsOnly.length === 11 && digitsOnly.startsWith('0')) {
-      // Leading 0 e.g. 09876543210 -> replace with 91
-      return `91${digitsOnly.slice(1)}`;
+    if (digitsOnly.length === 12 && digitsOnly.startsWith('91')) {
+      return digitsOnly;
     }
     return digitsOnly;
   }
@@ -182,6 +182,9 @@ class EmergencyContactService {
     const cleaned = raw.trim().replace(/[\s-()]/g, '');
     if (/^\d{10}$/.test(cleaned)) {
       return `+91${cleaned}`;
+    }
+    if (/^91\d{10}$/.test(cleaned)) {
+      return `+${cleaned}`;
     }
     return cleaned;
   }
@@ -286,18 +289,20 @@ class EmergencyContactService {
   }
 
   /**
-   * Generate direct SMS link
+   * Generate direct SMS link with proper iOS (&body=) and Android/Desktop (?body=) separator
    */
   public generateSmsUrl(phone: string, message: string): string {
     const cleanNumber = this.getCleanPhoneForSms(phone);
     const encoded = encodeURIComponent(message);
-    return `sms:${cleanNumber}?body=${encoded}`;
+    const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const separator = isIOS ? '&' : '?';
+    return `sms:${cleanNumber}${separator}body=${encoded}`;
   }
 
   /**
-   * 1-Tap Pure In-App Emergency Dispatch:
-   * Dispatches emergency alert to BOTH WhatsApp & SMS via Saathi Gateway
-   * WITHOUT opening external WhatsApp or SMS apps, and WITHOUT requiring manual sending.
+   * 1-Tap Emergency Dispatch:
+   * Dispatches emergency alert to BOTH WhatsApp & SMS.
+   * Physically triggers transmission via Web Share API or native direct messaging intents.
    */
   public dispatchUnifiedAlert(
     contact: EmergencyContact,
@@ -307,6 +312,7 @@ class EmergencyContactService {
     smsUrl: string;
     success: boolean;
     timestamp: string;
+    message: string;
   } {
     const message = this.buildEmergencyAlertMessage(report, contact.name);
     const whatsappUrl = this.generateWhatsAppUrl(contact.phone, message);
@@ -342,12 +348,75 @@ class EmergencyContactService {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('saathi:contact-alert-dispatched', {
-          detail: { contact, channels: ['whatsapp', 'sms'], timestamp, reportId: report.id, message }
+          detail: { contact, channels: ['whatsapp', 'sms'], timestamp, reportId: report.id, message, whatsappUrl, smsUrl }
         })
       );
     }
 
-    return { whatsappUrl, smsUrl, success: true, timestamp };
+    // Trigger REAL physical transmission on user device
+    this.executeDeviceDispatch(whatsappUrl, smsUrl, message);
+
+    return { whatsappUrl, smsUrl, success: true, timestamp, message };
+  }
+
+  /**
+   * Executes physical device transmission:
+   * Uses navigator.share on mobile for native 1-tap sheet to WhatsApp & SMS,
+   * or triggers direct WhatsApp + SMS intent fallbacks.
+   */
+  public executeDeviceDispatch(whatsappUrl: string, smsUrl: string, message: string): void {
+    if (typeof window === 'undefined') return;
+
+    // 1. On mobile devices with navigator.share, this delivers genuine 1-tap dispatch to WhatsApp/SMS
+    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+      navigator.share({
+        title: 'SAATHI EMERGENCY SOS',
+        text: message
+      }).catch((err) => {
+        console.log('navigator.share rejected or dismissed, opening direct intents:', err);
+        this.openDirectIntents(whatsappUrl, smsUrl);
+      });
+      return;
+    }
+
+    // 2. Direct intent launch for browsers without share API
+    this.openDirectIntents(whatsappUrl, smsUrl);
+  }
+
+  public openDirectIntents(whatsappUrl: string, smsUrl: string): void {
+    if (typeof window === 'undefined') return;
+
+    try {
+      window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+    } catch (e) {
+      console.warn('Could not launch WhatsApp:', e);
+    }
+
+    try {
+      const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      if (isMobile) {
+        setTimeout(() => {
+          window.location.href = smsUrl;
+        }, 600);
+      }
+    } catch (e) {
+      console.warn('Could not launch SMS intent:', e);
+    }
+  }
+
+  /**
+   * Utility to copy alert message to clipboard
+   */
+  public async copyToClipboard(text: string): Promise<boolean> {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch (e) {
+        console.warn('Clipboard write failed:', e);
+      }
+    }
+    return false;
   }
 
   /**

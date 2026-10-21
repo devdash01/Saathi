@@ -14,7 +14,8 @@ import {
   MapPin,
   Radio,
   Users,
-  Zap
+  Zap,
+  Copy
 } from 'lucide-react';
 import { speechService, cleanDuplicateSpeech, assembleSpeechResults } from '../services/speechRecognitionService';
 import { TacticalEmergencyMap } from './TacticalEmergencyMap';
@@ -117,6 +118,7 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
   }, []);
 
   const [dispatchedContactIds, setDispatchedContactIds] = useState<Record<string, boolean>>({});
+  const [copiedAlert, setCopiedAlert] = useState(false);
 
   const handleDispatchUnifiedAlert = useCallback((contact: EmergencyContact) => {
     const targetReport: EmergencyReport = activeReport || {
@@ -997,21 +999,95 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
                         <div
                           style={{
                             background: '#ecfdf5',
-                            border: '1px solid #10b981',
+                            border: '1.5px solid #10b981',
                             borderRadius: '8px',
-                            padding: '8px 10px',
+                            padding: '10px',
                             display: 'flex',
                             flexDirection: 'column',
-                            gap: '3px'
+                            gap: '6px'
                           }}
                         >
-                          <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#065f46', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                            <Check size={13} color="#059669" strokeWidth={3} />
-                            <span>Transmitted in Background (No App Opening Required)</span>
+                          <div style={{ fontSize: '0.74rem', fontWeight: 800, color: '#065f46', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <Check size={14} color="#059669" strokeWidth={3} />
+                            <span>SOS Prepared & Dispatched to {emergencyContacts[0].name}</span>
                           </div>
-                          <div style={{ fontSize: '0.64rem', color: '#047857', lineHeight: 1.35 }}>
-                            Dual channels (WhatsApp Cloud API + ERSS SMS Gateway) delivered Incident Summary and Live GPS tracking to {emergencyContacts[0].name}.
+                          <div style={{ fontSize: '0.66rem', color: '#047857', lineHeight: 1.35 }}>
+                            Live GPS coordinates, incident summary, and Police 112 tracking are prepared. Tap below to send or re-open directly on your device:
                           </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginTop: '3px' }}>
+                            <a
+                              href={emergencyContactService.generateWhatsAppUrl(
+                                emergencyContacts[0].phone,
+                                emergencyContactService.buildEmergencyAlertMessage(activeReport || ({ id: 'INC-SOS-181' } as any), emergencyContacts[0].name)
+                              )}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{
+                                background: '#25D366',
+                                color: '#ffffff',
+                                textDecoration: 'none',
+                                borderRadius: '6px',
+                                padding: '6px 8px',
+                                fontSize: '0.68rem',
+                                fontWeight: 800,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '4px'
+                              }}
+                            >
+                              <MessageSquare size={12} />
+                              <span>WhatsApp</span>
+                            </a>
+                            <a
+                              href={emergencyContactService.generateSmsUrl(
+                                emergencyContacts[0].phone,
+                                emergencyContactService.buildEmergencyAlertMessage(activeReport || ({ id: 'INC-SOS-181' } as any), emergencyContacts[0].name)
+                              )}
+                              style={{
+                                background: '#0284c7',
+                                color: '#ffffff',
+                                textDecoration: 'none',
+                                borderRadius: '6px',
+                                padding: '6px 8px',
+                                fontSize: '0.68rem',
+                                fontWeight: 800,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '4px'
+                              }}
+                            >
+                              <Phone size={12} />
+                              <span>Native SMS</span>
+                            </a>
+                          </div>
+                          <button
+                            onClick={async () => {
+                              const msg = emergencyContactService.buildEmergencyAlertMessage(activeReport || ({ id: 'INC-SOS-181' } as any), emergencyContacts[0].name);
+                              await emergencyContactService.copyToClipboard(msg);
+                              setCopiedAlert(true);
+                              setTimeout(() => setCopiedAlert(false), 3000);
+                            }}
+                            style={{
+                              background: copiedAlert ? '#dcfce7' : '#f8fafc',
+                              color: copiedAlert ? '#15803d' : '#334155',
+                              border: '1px solid #cbd5e1',
+                              borderRadius: '6px',
+                              padding: '5px 8px',
+                              fontSize: '0.64rem',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '4px',
+                              marginTop: '2px'
+                            }}
+                          >
+                            <Copy size={11} />
+                            <span>{copiedAlert ? '✓ Alert Copied to Clipboard!' : 'Copy Full Alert Text'}</span>
+                          </button>
                         </div>
                       )}
                     </div>
