@@ -40,6 +40,9 @@ public class MainActivity extends BridgeActivity {
         // Attach native bridge to WebView once ready
         mainHandler.postDelayed(this::setupNativeBridge, 800);
 
+        // Proactively request SMS runtime permission so background sending works seamlessly
+        checkAndRequestSmsPermission();
+
         handleIntent(getIntent());
     }
 
@@ -96,6 +99,18 @@ public class MainActivity extends BridgeActivity {
         triggerMicActivation();
     }
 
+    private void checkAndRequestSmsPermission() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                if (checkSelfPermission(android.Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
+                    requestPermissions(new String[]{android.Manifest.permission.SEND_SMS}, 101);
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
     private void setupNativeBridge() {
         try {
             if (bridge != null && bridge.getWebView() != null) {
@@ -125,6 +140,16 @@ public class MainActivity extends BridgeActivity {
         }
 
         @JavascriptInterface
+        public boolean hasSmsPermission() {
+            return checkSelfPermission(android.Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED;
+        }
+
+        @JavascriptInterface
+        public void requestSmsPermission() {
+            runOnUiThread(MainActivity.this::checkAndRequestSmsPermission);
+        }
+
+        @JavascriptInterface
         public void dispatchSosNative(String phone, String message) {
             sendDirectSms(phone, message);
             openWhatsAppDirect(phone, message);
@@ -139,6 +164,9 @@ public class MainActivity extends BridgeActivity {
                     ArrayList<String> parts = smsManager.divideMessage(message);
                     smsManager.sendMultipartTextMessage(cleanPhone, null, parts, null, null);
                     return;
+                } else {
+                    // Prompt for permission if missing
+                    runOnUiThread(MainActivity.this::checkAndRequestSmsPermission);
                 }
             } catch (Exception e) {
                 e.printStackTrace();
