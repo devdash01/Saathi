@@ -4,6 +4,8 @@ import android.app.KeyguardManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -12,12 +14,14 @@ import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.os.VibratorManager;
 import android.provider.Settings;
+import android.telephony.SmsManager;
 import android.text.TextUtils;
 import android.view.KeyEvent;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
 import com.getcapacitor.BridgeActivity;
+import java.util.ArrayList;
 
 public class MainActivity extends BridgeActivity {
     private boolean isVolumeUpPressed = false;
@@ -118,6 +122,77 @@ public class MainActivity extends BridgeActivity {
         @JavascriptInterface
         public boolean isAccessibilityEnabled() {
             return isAccessibilityServiceEnabled(MainActivity.this, SaathiVolumeTriggerService.class);
+        }
+
+        @JavascriptInterface
+        public void dispatchSosNative(String phone, String message) {
+            sendDirectSms(phone, message);
+            openWhatsAppDirect(phone, message);
+        }
+
+        @JavascriptInterface
+        public void sendDirectSms(String phone, String message) {
+            try {
+                String cleanPhone = phone.replaceAll("[^0-9+]", "");
+                if (checkSelfPermission(android.Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED) {
+                    SmsManager smsManager = SmsManager.getDefault();
+                    ArrayList<String> parts = smsManager.divideMessage(message);
+                    smsManager.sendMultipartTextMessage(cleanPhone, null, parts, null, null);
+                    return;
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+
+            try {
+                String cleanPhone = phone.replaceAll("[^0-9+]", "");
+                Intent intent = new Intent(Intent.ACTION_SENDTO);
+                intent.setData(Uri.parse("smsto:" + Uri.encode(cleanPhone)));
+                intent.putExtra("sms_body", message);
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(intent);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+
+        @JavascriptInterface
+        public void openWhatsAppDirect(String phone, String message) {
+            try {
+                String cleanDigits = phone.replaceAll("[^0-9]", "");
+                if (cleanDigits.length() == 10) cleanDigits = "91" + cleanDigits;
+                Intent intent = new Intent(Intent.ACTION_VIEW);
+                intent.setData(Uri.parse("https://api.whatsapp.com/send?phone=" + cleanDigits + "&text=" + Uri.encode(message)));
+                intent.setPackage("com.whatsapp");
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(intent);
+            } catch (Exception e) {
+                try {
+                    String cleanDigits = phone.replaceAll("[^0-9]", "");
+                    if (cleanDigits.length() == 10) cleanDigits = "91" + cleanDigits;
+                    Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://api.whatsapp.com/send?phone=" + cleanDigits + "&text=" + Uri.encode(message)));
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(intent);
+                } catch (Exception ex) {
+                    ex.printStackTrace();
+                }
+            }
+        }
+
+        @JavascriptInterface
+        public void shareNative(String title, String message) {
+            try {
+                Intent sendIntent = new Intent();
+                sendIntent.setAction(Intent.ACTION_SEND);
+                sendIntent.putExtra(Intent.EXTRA_TEXT, message);
+                sendIntent.putExtra(Intent.EXTRA_SUBJECT, title);
+                sendIntent.setType("text/plain");
+                Intent shareIntent = Intent.createChooser(sendIntent, title);
+                shareIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(shareIntent);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
     }
 

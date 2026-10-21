@@ -354,21 +354,43 @@ class EmergencyContactService {
     }
 
     // Trigger REAL physical transmission on user device
-    this.executeDeviceDispatch(whatsappUrl, smsUrl, message);
+    this.executeDeviceDispatch(whatsappUrl, smsUrl, message, contact.phone);
 
     return { whatsappUrl, smsUrl, success: true, timestamp, message };
   }
 
   /**
    * Executes physical device transmission:
-   * Uses navigator.share on mobile for native 1-tap sheet to WhatsApp & SMS,
+   * Uses native Android bridge if available, Web Share API on mobile,
    * or triggers direct WhatsApp + SMS intent fallbacks.
    */
-  public executeDeviceDispatch(whatsappUrl: string, smsUrl: string, message: string): void {
+  public executeDeviceDispatch(whatsappUrl: string, smsUrl: string, message: string, phone: string): void {
     if (typeof window === 'undefined') return;
 
-    // 1. On mobile devices with navigator.share, this delivers genuine 1-tap dispatch to WhatsApp/SMS
-    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+    // 1. Check if running inside Saathi Native Android APK
+    const saathiNative = (window as any).SaathiNative;
+    if (saathiNative) {
+      if (typeof saathiNative.dispatchSosNative === 'function') {
+        try {
+          saathiNative.dispatchSosNative(phone, message);
+          return;
+        } catch (e) {
+          console.warn('SaathiNative.dispatchSosNative failed:', e);
+        }
+      }
+      if (typeof saathiNative.shareNative === 'function') {
+        try {
+          saathiNative.shareNative('SAATHI EMERGENCY SOS', message);
+          return;
+        } catch (e) {
+          console.warn('SaathiNative.shareNative failed:', e);
+        }
+      }
+    }
+
+    // 2. On mobile devices with navigator.share, this delivers genuine 1-tap dispatch to WhatsApp/SMS
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if (isMobile && typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
       navigator.share({
         title: 'SAATHI EMERGENCY SOS',
         text: message
@@ -379,7 +401,7 @@ class EmergencyContactService {
       return;
     }
 
-    // 2. Direct intent launch for browsers without share API
+    // 3. Direct intent launch for browsers without share API
     this.openDirectIntents(whatsappUrl, smsUrl);
   }
 
@@ -387,9 +409,15 @@ class EmergencyContactService {
     if (typeof window === 'undefined') return;
 
     try {
-      window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+      const a = document.createElement('a');
+      a.href = whatsappUrl;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     } catch (e) {
-      console.warn('Could not launch WhatsApp:', e);
+      window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
     }
 
     try {
@@ -397,7 +425,7 @@ class EmergencyContactService {
       if (isMobile) {
         setTimeout(() => {
           window.location.href = smsUrl;
-        }, 600);
+        }, 500);
       }
     } catch (e) {
       console.warn('Could not launch SMS intent:', e);

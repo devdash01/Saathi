@@ -1683,6 +1683,57 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
                           : '⚡ Dispatch 1-Tap SOS (WhatsApp + SMS)'}
                       </span>
                     </button>
+
+                    {dispatchedContactIds[emergencyContacts[0]?.id] && (
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginTop: '6px' }}>
+                        <a
+                          href={emergencyContactService.generateWhatsAppUrl(
+                            emergencyContacts[0].phone,
+                            emergencyContactService.buildEmergencyAlertMessage(activeReport || ({ id: 'INC-SOS-181' } as any), emergencyContacts[0].name)
+                          )}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            background: '#25D366',
+                            color: '#ffffff',
+                            textDecoration: 'none',
+                            borderRadius: '6px',
+                            padding: '6px 8px',
+                            fontSize: '0.68rem',
+                            fontWeight: 800,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          <MessageSquare size={12} />
+                          <span>WhatsApp</span>
+                        </a>
+                        <a
+                          href={emergencyContactService.generateSmsUrl(
+                            emergencyContacts[0].phone,
+                            emergencyContactService.buildEmergencyAlertMessage(activeReport || ({ id: 'INC-SOS-181' } as any), emergencyContacts[0].name)
+                          )}
+                          style={{
+                            background: '#0284c7',
+                            color: '#ffffff',
+                            textDecoration: 'none',
+                            borderRadius: '6px',
+                            padding: '6px 8px',
+                            fontSize: '0.68rem',
+                            fontWeight: 800,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          <Phone size={12} />
+                          <span>Native SMS</span>
+                        </a>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -2114,6 +2165,57 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
                             : `⚡ Send 1-Tap SOS to ${emergencyContacts[0].name} (WhatsApp + SMS)`}
                         </span>
                       </button>
+
+                      {dispatchedContactIds[emergencyContacts[0]?.id] && (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginTop: '6px' }}>
+                          <a
+                            href={emergencyContactService.generateWhatsAppUrl(
+                              emergencyContacts[0].phone,
+                              emergencyContactService.buildEmergencyAlertMessage(activeReport || ({ id: 'INC-SOS-181' } as any), emergencyContacts[0].name)
+                            )}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              background: '#25D366',
+                              color: '#ffffff',
+                              textDecoration: 'none',
+                              borderRadius: '6px',
+                              padding: '6px 8px',
+                              fontSize: '0.68rem',
+                              fontWeight: 800,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '4px'
+                            }}
+                          >
+                            <MessageSquare size={12} />
+                            <span>WhatsApp</span>
+                          </a>
+                          <a
+                            href={emergencyContactService.generateSmsUrl(
+                              emergencyContacts[0].phone,
+                              emergencyContactService.buildEmergencyAlertMessage(activeReport || ({ id: 'INC-SOS-181' } as any), emergencyContacts[0].name)
+                            )}
+                            style={{
+                              background: '#0284c7',
+                              color: '#ffffff',
+                              textDecoration: 'none',
+                              borderRadius: '6px',
+                              padding: '6px 8px',
+                              fontSize: '0.68rem',
+                              fontWeight: 800,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '4px'
+                            }}
+                          >
+                            <Phone size={12} />
+                            <span>Native SMS</span>
+                          </a>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div style={{ fontSize: '0.68rem', color: '#64748b' }}>
