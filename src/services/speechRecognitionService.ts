@@ -66,16 +66,16 @@ export function smartMergeTranscript(previousText: string, newChunk: string): st
   if (!prev) return next;
   if (!next) return prev;
 
-  const prevLower = prev.toLowerCase();
-  const nextLower = next.toLowerCase();
+  const prevNorm = prev.toLowerCase().replace(/[^a-z0-9\s]/gi, ' ').replace(/\s+/g, ' ').trim();
+  const nextNorm = next.toLowerCase().replace(/[^a-z0-9\s]/gi, ' ').replace(/\s+/g, ' ').trim();
 
   // If newChunk already starts with previousText, use newChunk directly
-  if (nextLower.startsWith(prevLower)) {
+  if (nextNorm.startsWith(prevNorm)) {
     return next;
   }
 
-  // If previousText already ends with newChunk, keep previousText
-  if (prevLower.endsWith(nextLower)) {
+  // If previousText already contains newChunk at the end or anywhere
+  if (prevNorm.endsWith(nextNorm) || prevNorm.includes(nextNorm)) {
     return prev;
   }
 
@@ -362,7 +362,8 @@ export class HybridSpeechRecognitionService {
   public start(
     onResult: SpeechCallback,
     onError?: (error: string) => void,
-    onEnd?: () => void
+    onEnd?: () => void,
+    initialText?: string
   ): boolean {
     this.onResultCallback = onResult;
     this.onErrorCallback = onError || null;
@@ -370,10 +371,11 @@ export class HybridSpeechRecognitionService {
     this.isListeningState = true;
     this.isNativeFallbackActive = false;
 
-    // Reset session storage on new mic press
-    this.sessionPersistentFinal = '';
-    this.lastEmittedTranscript = '';
-    this.nativeAccumulatedFinal = '';
+    // Reset session storage to initialText on new mic press
+    const initial = (initialText || '').trim();
+    this.sessionPersistentFinal = initial;
+    this.lastEmittedTranscript = initial;
+    this.nativeAccumulatedFinal = initial;
     this.lastAudioActivityTime = Date.now();
 
     const win = (typeof window !== 'undefined' ? window : {}) as IWindowWithSpeech;

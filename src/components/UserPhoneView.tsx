@@ -17,8 +17,7 @@ import {
   Zap,
   Copy
 } from 'lucide-react';
-import { speechService, smartMergeTranscript, cleanDuplicateSpeech } from '../services/speechRecognitionService';
-import { parseEmergencyKeywords } from '../services/emergencyKeywordService';
+import { speechService } from '../services/speechRecognitionService';
 import { TacticalEmergencyMap } from './TacticalEmergencyMap';
 import { deviceLocationService } from '../services/deviceLocationService';
 import { emergencyContactService } from '../services/emergencyContactService';
@@ -260,7 +259,7 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
   const startLiveVoiceRecognition = useCallback(() => {
     setVoiceError(null);
     setSarvamStatus('transcribing');
-    const baseText = transcriptRef.current ? transcriptRef.current.trim() : '';
+    const initialText = transcriptRef.current ? transcriptRef.current.trim() : '';
     const voiceMsgId = `voice-${Date.now()}`;
     currentVoiceMessageIdRef.current = voiceMsgId;
 
@@ -271,13 +270,9 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
         setVoiceError(null);
         const formatted = isWhisperMode && !spoken.includes('[whisper]') ? `[whisper] ${spoken}` : spoken;
 
-        const accumulated = baseText
-          ? cleanDuplicateSpeech(smartMergeTranscript(baseText, formatted))
-          : cleanDuplicateSpeech(formatted);
-
-        setTranscript(accumulated);
-        transcriptRef.current = accumulated;
-        onUserInputChange(accumulated);
+        setTranscript(formatted);
+        transcriptRef.current = formatted;
+        onUserInputChange(formatted);
         setSarvamStatus('connected');
 
         if (spoken) {
@@ -316,7 +311,6 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
         // Suppress benign pauses
         if (err === 'no-speech' || err === 'aborted') return;
         console.warn('Speech recognition warning:', err);
-        setVoiceError('Microphone active. Listening for your voice...');
       },
       () => {
         setIsVoiceListening(false);
@@ -327,7 +321,8 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
           );
           currentVoiceMessageIdRef.current = null;
         }
-      }
+      },
+      initialText
     );
 
     if (started) {
@@ -1216,56 +1211,10 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
                     <span style={{ fontSize: '0.6rem', color: '#ef4444', fontWeight: 700 }}>● REC LIVE</span>
                   )}
                 </div>
-                <div style={{ fontSize: '0.86rem', color: transcript ? '#f1f5f9' : '#94a3b8', lineHeight: 1.45, fontWeight: 500, minHeight: '36px' }}>
-                  {transcript ? (() => {
-                    const parsed = parseEmergencyKeywords(transcript);
-                    return (
-                      <div>
-                        <div>
-                          {parsed.segments.map((seg, idx) =>
-                            seg.isKeyword ? (
-                              <mark
-                                key={idx}
-                                style={{
-                                  background: seg.badgeColor || '#dc2626',
-                                  color: '#ffffff',
-                                  padding: '1px 5px',
-                                  borderRadius: '4px',
-                                  fontWeight: 700,
-                                  fontSize: '0.84rem',
-                                  margin: '0 2px'
-                                }}
-                              >
-                                {seg.text}
-                              </mark>
-                            ) : (
-                              <span key={idx}>{seg.text}</span>
-                            )
-                          )}
-                        </div>
-                        {parsed.detectedKeywords.length > 0 && (
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '8px' }}>
-                            {parsed.detectedKeywords.map((kw, kidx) => (
-                              <span
-                                key={kidx}
-                                style={{
-                                  fontSize: '0.66rem',
-                                  padding: '2px 7px',
-                                  borderRadius: '12px',
-                                  background: 'rgba(255, 255, 255, 0.1)',
-                                  border: `1px solid ${kw.color}`,
-                                  color: kw.color,
-                                  fontWeight: 800
-                                }}
-                              >
-                                ● {kw.label}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })() : (
+                <div style={{ fontSize: '0.88rem', color: transcript ? '#f1f5f9' : '#94a3b8', lineHeight: 1.5, fontWeight: 500, minHeight: '36px' }}>
+                  {transcript ? (
+                    <span>{transcript}</span>
+                  ) : (
                     <span style={{ fontStyle: 'italic', opacity: 0.8 }}>
                       No words spoken yet. Tap the microphone above to speak into your mic, or use "Type instead" below.
                     </span>
