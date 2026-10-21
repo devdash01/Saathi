@@ -2,7 +2,7 @@
  * Sarvam AI Service for Real Indian Speech-to-Text & Text-to-Speech
  */
 
-export const SARVAM_API_KEY = 'sk_ei5b63rt_gjbGpemT3DSLT3w70K9ce5jF';
+export const SARVAM_API_KEY = 'sk_9xkmvr4m_YGJZ46PmmHz2Y8DsYqBW0Jge';
 
 export interface SarvamSTTResponse {
   request_id?: string;

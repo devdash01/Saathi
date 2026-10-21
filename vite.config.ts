@@ -22,7 +22,7 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/sarvam/, ''),
         headers: {
-          'api-subscription-key': 'sk_bafne65q_tmDmBcTLO5NV6z24j0dJq7Gh'
+          'api-subscription-key': 'sk_9xkmvr4m_YGJZ46PmmHz2Y8DsYqBW0Jge'
         }
       }
     }
