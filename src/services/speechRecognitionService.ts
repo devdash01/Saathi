@@ -42,13 +42,10 @@ export function cleanDuplicateSpeech(text: string): string {
 
   const deduped: string[] = [];
   for (let i = 0; i < words.length; i++) {
-    const current = words[i];
+    const current = words[i].trim();
+    if (!current) continue;
     const prev = deduped[deduped.length - 1];
-    if (
-      prev &&
-      prev.toLowerCase().replace(/[^a-z0-9]/gi, '') ===
-        current.toLowerCase().replace(/[^a-z0-9]/gi, '')
-    ) {
+    if (prev && prev.toLowerCase() === current.toLowerCase()) {
       continue;
     }
     deduped.push(current);
@@ -120,7 +117,7 @@ export class UniversalSpeechRecognitionService {
         for (let i = e.resultIndex; i < e.results.length; i++) {
           const r = e.results[i];
           if (!r || !r[0]) continue;
-          const t = devanagariToHinglish(cleanDuplicateSpeech(r[0].transcript || ''));
+          const t = cleanDuplicateSpeech(devanagariToHinglish(r[0].transcript || ''));
           if (r.isFinal) {
             this.acc.commit(t);
           } else {
@@ -254,7 +251,7 @@ export class UniversalSpeechRecognitionService {
       if (!d) return;
 
       const raw = (d.transcript || '').trim();
-      const t = devanagariToHinglish(cleanDuplicateSpeech(raw));
+      const t = cleanDuplicateSpeech(devanagariToHinglish(raw));
 
       if (d.isFinal) {
         this.acc.commit(t || undefined); // empty final -> commit what we had
