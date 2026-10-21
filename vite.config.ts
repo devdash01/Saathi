@@ -4,6 +4,15 @@ import { defineConfig } from 'vite';
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      output: {
+        entryFileNames: 'assets/[name]-[hash]-v2.js',
+        chunkFileNames: 'assets/[name]-[hash]-v2.js',
+        assetFileNames: 'assets/[name]-[hash].[ext]'
+      }
+    }
+  },
   server: {
     host: '127.0.0.1',
     port: 5173,
@@ -19,3 +28,4 @@ export default defineConfig({
     }
   }
 });
+
