@@ -320,7 +320,8 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
           );
           currentVoiceMessageIdRef.current = null;
         }
-      }
+      },
+      transcriptRef.current || transcript || ''
     );
 
     if (started) {
@@ -454,6 +455,7 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
 
   const handleStartNewSessionClick = () => {
     stopLiveVoiceRecognition();
+    speechService.reset();
     setTranscript('');
     transcriptRef.current = '';
     setMessages([]);
