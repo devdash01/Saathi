@@ -94,6 +94,7 @@ export function App() {
   const [sarvamLatency] = useState<number>(280);
   const [dispatchAlertToast, setDispatchAlertToast] = useState<string | null>(null);
   const translationDebounceRef = useRef<number | null>(null);
+  const syncDebounceRef = useRef<number | null>(null);
 
   // Cloud Real-Time Sync State (Mobile Data & Global Cross-Device Link)
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('disconnected');
@@ -307,23 +308,26 @@ export function App() {
         return [updatedReport, ...prev];
       });
 
-      // E. Persist report locally in background
-      reportStorageService.saveReportLocally(updatedReport).catch(console.warn);
-
-      // F. Submit to network delivery service
-      networkDeliveryService.submitReport(updatedReport).catch(console.warn);
-
-      // Cloud real-time sync broadcast to paired CAD / Phone consoles across mobile data
-      if (!isRemoteSync) {
-        cloudSyncService.broadcast('phone', 'CALLER_INPUT', {
-          text,
-          contextHint,
-          audioUrl,
-          callerAnswers,
-          location: updatedReport.location,
-          nearbyServices: instantGeo.nearbyServices
-        });
+      // E & F. Debounce heavy background persistence & network broadcasts so live speech rendering is 0ms instant
+      if (syncDebounceRef.current) {
+        window.clearTimeout(syncDebounceRef.current);
       }
+      syncDebounceRef.current = window.setTimeout(() => {
+        reportStorageService.saveReportLocally(updatedReport).catch(console.warn);
+        networkDeliveryService.submitReport(updatedReport).catch(console.warn);
+
+        // Cloud real-time sync broadcast to paired CAD / Phone consoles across mobile data
+        if (!isRemoteSync) {
+          cloudSyncService.broadcast('phone', 'CALLER_INPUT', {
+            text,
+            contextHint,
+            audioUrl,
+            callerAnswers,
+            location: updatedReport.location,
+            nearbyServices: instantGeo.nearbyServices
+          });
+        }
+      }, 350);
 
       // G. Background async refinement: Debounced Sarvam translation (non-blocking)
       if (translationDebounceRef.current) {

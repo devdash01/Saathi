@@ -2,14 +2,10 @@
  * SAATHI Zero-Lag Real-Time Voice Intelligence Engine
  * 
  * Flawless Live Speech Architecture:
- * 1. Universal Web Speech API (Desktop Chrome, Mobile Chrome, Edge, and Android Capacitor WebView):
- *    - Real-time word-by-word streaming (< 20ms latency).
- *    - Automatic safe instance recreation on natural pauses (zero dead states).
- *    - Continuous liveness watchdog that resurrects recognition if Chrome ever drops it.
- *    - Smart N-Gram overlap merge & deduplication (zero word repetition, zero word truncation).
- *    - Romanized Hinglish transcription by default via en-IN with fallback Devanagari transliteration.
- * 2. Native Android Bridge (SaathiNative):
- *    - Active fallback if Web Speech API is absent on older hardware.
+ * - Direct Web Speech API (webkitSpeechRecognition) on Desktop Chrome and Android Capacitor WebView.
+ * - Single-pass event.results traversal without artificial restart string merging (zero repetition).
+ * - Instantaneous, sub-20ms word-by-word streaming.
+ * - Automatic Roman Hinglish output via en-IN and Devanagari transliteration.
  */
 
 import { devanagariToHinglish } from './transliterationService';
@@ -34,7 +30,7 @@ interface IWindowWithSpeech extends Window {
 }
 
 /**
- * Eliminates immediate adjacent duplicate words (e.g. "police police" -> "police", "bachao bachao" -> "bachao")
+ * Eliminates immediate adjacent duplicate words (e.g. "police police" -> "police")
  */
 export function cleanDuplicateSpeech(text: string): string {
   if (!text) return '';
@@ -48,66 +44,11 @@ export function cleanDuplicateSpeech(text: string): string {
       prev.toLowerCase().replace(/[^a-z0-9]/gi, '') ===
         current.toLowerCase().replace(/[^a-z0-9]/gi, '')
     ) {
-      continue; // Skip adjacent duplicate word
+      continue;
     }
     deduped.push(current);
   }
   return deduped.join(' ');
-}
-
-/**
- * Intelligently merges previously accumulated transcript with a newly recognized chunk,
- * detecting and stripping overlapping phrase prefixes/suffixes (1 to 10 words) so words
- * NEVER repeat across pauses or recognizer restarts.
- */
-export function smartMergeTranscript(previousText: string, newChunk: string): string {
-  const prev = (previousText || '').trim();
-  const next = (newChunk || '').trim();
-  if (!prev) return next;
-  if (!next) return prev;
-
-  const prevNorm = prev.toLowerCase().replace(/[^a-z0-9\s]/gi, ' ').replace(/\s+/g, ' ').trim();
-  const nextNorm = next.toLowerCase().replace(/[^a-z0-9\s]/gi, ' ').replace(/\s+/g, ' ').trim();
-
-  // If newChunk already starts with previousText, use newChunk directly
-  if (nextNorm.startsWith(prevNorm)) {
-    return next;
-  }
-
-  // If previousText already contains newChunk at the end or anywhere
-  if (prevNorm.endsWith(nextNorm) || prevNorm.includes(nextNorm)) {
-    return prev;
-  }
-
-  const prevWords = prev.split(/\s+/);
-  const nextWords = next.split(/\s+/);
-
-  // Find longest overlap of up to 10 words between end of prev and start of next
-  const maxCheck = Math.min(prevWords.length, nextWords.length, 10);
-  let overlapCount = 0;
-
-  for (let len = maxCheck; len >= 1; len--) {
-    const prevSlice = prevWords
-      .slice(-len)
-      .map((w) => w.toLowerCase().replace(/[^a-z0-9]/gi, ''))
-      .join(' ');
-    const nextSlice = nextWords
-      .slice(0, len)
-      .map((w) => w.toLowerCase().replace(/[^a-z0-9]/gi, ''))
-      .join(' ');
-
-    if (prevSlice && prevSlice === nextSlice) {
-      overlapCount = len;
-      break;
-    }
-  }
-
-  if (overlapCount > 0) {
-    const nonOverlappingNext = nextWords.slice(overlapCount).join(' ');
-    return nonOverlappingNext ? `${prev} ${nonOverlappingNext}` : prev;
-  }
-
-  return `${prev} ${next}`;
 }
 
 export class HybridSpeechRecognitionService {
@@ -117,18 +58,8 @@ export class HybridSpeechRecognitionService {
   private onErrorCallback: ((error: string) => void) | null = null;
   private onEndCallback: (() => void) | null = null;
 
-  // Default to en-IN for Romanized Hinglish transcription
+  // Default to en-IN for clean Romanized Hinglish transcription
   private currentLanguage: string = 'en-IN';
-
-  // Persistent storage for finalized sentences during the current active mic session
-  private sessionPersistentFinal: string = '';
-  private lastEmittedTranscript: string = '';
-
-  // Watchdog and restart management
-  private restartTimer: any = null;
-  private watchdogInterval: any = null;
-  private lastAudioActivityTime: number = 0;
-  private isNativeFallbackActive: boolean = false;
 
   // Native Android bridge tracking
   private nativeAccumulatedFinal: string = '';
@@ -137,202 +68,84 @@ export class HybridSpeechRecognitionService {
 
   constructor() {
     this.currentLanguage = 'en-IN';
+    this.initWebSpeechRecognition();
   }
 
-  /**
-   * Factory that instantiates a clean, fresh SpeechRecognition instance
-   */
-  private createFreshRecognition(): any {
-    if (typeof window === 'undefined') return null;
+  private initWebSpeechRecognition() {
+    if (typeof window === 'undefined') return;
     const win = window as IWindowWithSpeech;
     const SpeechClass = win.SpeechRecognition || win.webkitSpeechRecognition;
-    if (!SpeechClass) return null;
+    if (!SpeechClass) return;
 
     try {
-      const rec = new SpeechClass();
-      rec.continuous = true;
-      rec.interimResults = true;
-      rec.maxAlternatives = 1;
-      rec.lang = this.currentLanguage;
-      return rec;
-    } catch (e) {
-      console.warn('Failed creating fresh SpeechRecognition:', e);
-      return null;
-    }
-  }
+      this.recognition = new SpeechClass();
+      this.recognition.continuous = true;
+      this.recognition.interimResults = true;
+      this.recognition.maxAlternatives = 1;
+      this.recognition.lang = this.currentLanguage;
 
-  /**
-   * Cleans up and detaches existing instance safely
-   */
-  private destroyCurrentRecognition() {
-    if (this.recognition) {
-      try {
-        this.recognition.onresult = null;
-        this.recognition.onerror = null;
-        this.recognition.onend = null;
-        this.recognition.onstart = null;
-        this.recognition.onaudiostart = null;
-        this.recognition.onspeechstart = null;
-        this.recognition.abort();
-      } catch (_e) {}
-      this.recognition = null;
-    }
-  }
+      this.recognition.onresult = (event: any) => {
+        let accumulatedFinal = '';
+        let interim = '';
 
-  /**
-   * Binds robust event handlers to a recognition instance
-   */
-  private attachRecognitionListeners(rec: any) {
-    if (!rec) return;
+        for (let i = 0; i < event.results.length; ++i) {
+          const res = event.results[i];
+          if (!res || !res[0]) continue;
+          const text = (res[0].transcript || '').trim();
+          if (!text) continue;
 
-    rec.onstart = () => {
-      this.lastAudioActivityTime = Date.now();
-    };
-
-    rec.onspeechstart = () => {
-      this.lastAudioActivityTime = Date.now();
-    };
-
-    rec.onresult = (event: any) => {
-      this.lastAudioActivityTime = Date.now();
-      let finalSlice = '';
-      let interimSlice = '';
-
-      for (let i = 0; i < event.results.length; ++i) {
-        const res = event.results[i];
-        if (!res || !res[0]) continue;
-        const text = (res[0].transcript || '').trim();
-        if (!text) continue;
-
-        if (res.isFinal) {
-          finalSlice += (finalSlice ? ' ' : '') + text;
-        } else {
-          interimSlice += (interimSlice ? ' ' : '') + text;
+          if (res.isFinal) {
+            accumulatedFinal += (accumulatedFinal ? ' ' : '') + text;
+          } else {
+            interim += (interim ? ' ' : '') + text;
+          }
         }
-      }
 
-      // Current session slice (finalized + interim words in flight)
-      const currentSessionText = [finalSlice, interimSlice].filter(Boolean).join(' ').trim();
+        const raw = [accumulatedFinal, interim].filter(Boolean).join(' ').trim();
+        if (!raw) return;
 
-      // Smart merge previous session text with current session text to guarantee zero word repetition
-      const combined = smartMergeTranscript(this.sessionPersistentFinal, currentSessionText);
-      const cleaned = cleanDuplicateSpeech(combined);
-      const formatted = this.currentLanguage === 'hi-IN' ? cleaned : devanagariToHinglish(cleaned);
+        const cleaned = cleanDuplicateSpeech(raw);
+        const formatted = this.currentLanguage === 'hi-IN' ? cleaned : devanagariToHinglish(cleaned);
 
-      if (formatted && formatted !== this.lastEmittedTranscript) {
-        this.lastEmittedTranscript = formatted;
-        if (this.onResultCallback) {
+        if (formatted && this.onResultCallback) {
           this.onResultCallback({
             transcript: formatted,
-            isFinal: Boolean(finalSlice && !interimSlice)
+            isFinal: Boolean(accumulatedFinal && !interim)
           });
         }
-      }
-    };
+      };
 
-    rec.onerror = (event: any) => {
-      const err = event.error;
-      // Natural silence or pause - NOT a fatal error, recognition will seamlessly continue or restart
-      if (err === 'no-speech') {
-        this.lastAudioActivityTime = Date.now();
-        return;
-      }
+      this.recognition.onerror = (event: any) => {
+        if (event.error === 'no-speech' || event.error === 'aborted') return;
+        console.warn('SpeechRecognition error:', event.error);
+        if (this.onErrorCallback) {
+          this.onErrorCallback(event.error);
+        }
+      };
 
-      // Chrome aborted signal during manual or programmatic restart
-      if (err === 'aborted') {
-        return;
-      }
-
-      console.warn('Web Speech transient event error:', err);
-
-      // On network timeout or glitch, schedule immediate safe resurrection
-      if (err === 'network') {
+      this.recognition.onend = () => {
         if (this.isListeningState) {
-          this.scheduleSafeRestart(150);
+          try {
+            this.recognition.start();
+            return;
+          } catch (_e) {
+            setTimeout(() => {
+              if (this.isListeningState && this.recognition) {
+                try {
+                  this.recognition.start();
+                } catch (_err) {}
+              }
+            }, 100);
+            return;
+          }
         }
-        return;
-      }
-
-      if (this.onErrorCallback && err !== 'no-speech') {
-        this.onErrorCallback(err);
-      }
-    };
-
-    rec.onend = () => {
-      // If user did NOT explicitly stop listening, seamlessly restart with fresh instance
-      if (this.isListeningState) {
-        // Commit whatever was emitted so far into sessionPersistentFinal before restarting
-        if (this.lastEmittedTranscript) {
-          this.sessionPersistentFinal = this.lastEmittedTranscript;
+        if (this.onEndCallback) {
+          this.onEndCallback();
         }
-        this.scheduleSafeRestart(60);
-        return;
-      }
-
-      if (this.onEndCallback) {
-        this.onEndCallback();
-      }
-    };
-  }
-
-  /**
-   * Resurrects recognition with a clean instance after a brief OS audio device release delay
-   */
-  private scheduleSafeRestart(delayMs: number = 60) {
-    if (this.restartTimer) {
-      clearTimeout(this.restartTimer);
-      this.restartTimer = null;
-    }
-
-    if (!this.isListeningState) return;
-
-    this.restartTimer = setTimeout(() => {
-      if (!this.isListeningState) return;
-
-      this.destroyCurrentRecognition();
-      const freshRec = this.createFreshRecognition();
-      if (!freshRec) return;
-
-      this.recognition = freshRec;
-      this.attachRecognitionListeners(freshRec);
-
-      try {
-        freshRec.start();
-        this.lastAudioActivityTime = Date.now();
-      } catch (err: any) {
-        console.warn('Safe restart error, retrying in 200ms:', err);
-        if (this.isListeningState) {
-          this.scheduleSafeRestart(200);
-        }
-      }
-    }, delayMs);
-  }
-
-  /**
-   * Keep-alive watchdog that monitors microphone liveness and prevents silent stalls
-   */
-  private startLivenessWatchdog() {
-    this.stopLivenessWatchdog();
-    this.watchdogInterval = setInterval(() => {
-      if (!this.isListeningState) {
-        this.stopLivenessWatchdog();
-        return;
-      }
-
-      // If active Web Speech instance disappeared unexpectedly or stalled while listening is true
-      if (!this.isNativeFallbackActive && this.isListeningState) {
-        const timeSinceActivity = Date.now() - this.lastAudioActivityTime;
-        if (!this.recognition || timeSinceActivity > 15000) {
-          this.scheduleSafeRestart(0);
-        }
-      }
-    }, 1200);
-  }
-
-  private stopLivenessWatchdog() {
-    if (this.watchdogInterval) {
-      clearInterval(this.watchdogInterval);
-      this.watchdogInterval = null;
+      };
+    } catch (e) {
+      console.warn('Failed to init Web Speech API:', e);
+      this.recognition = null;
     }
   }
 
@@ -350,7 +163,6 @@ export class HybridSpeechRecognitionService {
     if (lang === 'Hindi') {
       this.currentLanguage = 'hi-IN';
     } else {
-      // Hinglish & English use en-IN for clean Roman Hinglish transcription
       this.currentLanguage = 'en-IN';
     }
 
@@ -362,25 +174,17 @@ export class HybridSpeechRecognitionService {
   public start(
     onResult: SpeechCallback,
     onError?: (error: string) => void,
-    onEnd?: () => void,
-    initialText?: string
+    onEnd?: () => void
   ): boolean {
     this.onResultCallback = onResult;
     this.onErrorCallback = onError || null;
     this.onEndCallback = onEnd || null;
     this.isListeningState = true;
-    this.isNativeFallbackActive = false;
-
-    // Reset session storage to initialText on new mic press
-    const initial = (initialText || '').trim();
-    this.sessionPersistentFinal = initial;
-    this.lastEmittedTranscript = initial;
-    this.nativeAccumulatedFinal = initial;
-    this.lastAudioActivityTime = Date.now();
+    this.nativeAccumulatedFinal = '';
 
     const win = (typeof window !== 'undefined' ? window : {}) as IWindowWithSpeech;
 
-    // Proactively verify/request Android microphone permission if inside Capacitor APK
+    // Verify/request Android microphone permission if inside Capacitor APK
     if (win.SaathiNative && typeof win.SaathiNative.requestAudioPermission === 'function') {
       try {
         if (win.SaathiNative.hasAudioPermission && !win.SaathiNative.hasAudioPermission()) {
@@ -389,29 +193,24 @@ export class HybridSpeechRecognitionService {
       } catch (_e) {}
     }
 
-    // 1. PRIMARY ENGINE: Universal Web Speech API (Works on Laptop Chrome and Modern Android System WebView)
-    const freshRec = this.createFreshRecognition();
-    if (freshRec) {
-      this.destroyCurrentRecognition();
-      this.recognition = freshRec;
-      this.attachRecognitionListeners(freshRec);
+    // 1. PRIMARY ENGINE: Universal Web Speech API
+    if (!this.recognition) {
+      this.initWebSpeechRecognition();
+    }
 
+    if (this.recognition) {
       try {
-        freshRec.start();
-        this.startLivenessWatchdog();
+        this.recognition.lang = this.currentLanguage;
+        this.recognition.start();
         return true;
       } catch (e: any) {
-        if (e.name === 'InvalidStateError') {
-          this.startLivenessWatchdog();
-          return true;
-        }
-        console.warn('Web Speech start error, checking native fallback:', e);
+        if (e.name === 'InvalidStateError') return true;
+        console.warn('Web Speech start error:', e);
       }
     }
 
-    // 2. FALLBACK ENGINE: Native Android SpeechRecognizer (Only if Web Speech API is missing)
+    // 2. FALLBACK ENGINE: Native Android SpeechRecognizer Bridge
     if (win.SaathiNative && typeof win.SaathiNative.startSpeechRecognition === 'function') {
-      this.isNativeFallbackActive = true;
       this.setupNativeAndroidListeners();
       try {
         win.SaathiNative.startSpeechRecognition(this.currentLanguage);
@@ -423,9 +222,7 @@ export class HybridSpeechRecognitionService {
 
     this.isListeningState = false;
     if (this.onErrorCallback) {
-      this.onErrorCallback(
-        'Speech recognition is not supported in this browser. Please use Google Chrome.'
-      );
+      this.onErrorCallback('Speech recognition is not supported in this browser. Please use Google Chrome.');
     }
     return false;
   }
@@ -440,17 +237,19 @@ export class HybridSpeechRecognitionService {
         const text = this.currentLanguage === 'hi-IN' ? raw : devanagariToHinglish(raw);
 
         if (data.isFinal) {
-          this.nativeAccumulatedFinal = smartMergeTranscript(this.nativeAccumulatedFinal, text);
+          this.nativeAccumulatedFinal = this.nativeAccumulatedFinal
+            ? `${this.nativeAccumulatedFinal} ${text}`.trim()
+            : text;
           const cleaned = cleanDuplicateSpeech(this.nativeAccumulatedFinal);
-          this.lastEmittedTranscript = cleaned;
           this.onResultCallback({
             transcript: cleaned,
             isFinal: true
           });
         } else {
-          const currentTotal = smartMergeTranscript(this.nativeAccumulatedFinal, text);
+          const currentTotal = this.nativeAccumulatedFinal
+            ? `${this.nativeAccumulatedFinal} ${text}`.trim()
+            : text;
           const cleaned = cleanDuplicateSpeech(currentTotal);
-          this.lastEmittedTranscript = cleaned;
           this.onResultCallback({
             transcript: cleaned,
             isFinal: false
@@ -461,7 +260,6 @@ export class HybridSpeechRecognitionService {
 
     this.nativeSpeechErrorHandler = (e: any) => {
       console.warn('Native Android Speech error event:', e.detail);
-      // Suppress transient pause errors
       if (e.detail?.error && !e.detail.error.includes('timeout') && !e.detail.error.includes('7')) {
         if (this.onErrorCallback) {
           this.onErrorCallback(e.detail.error);
@@ -486,18 +284,8 @@ export class HybridSpeechRecognitionService {
 
   public stop(): void {
     this.isListeningState = false;
-    this.stopLivenessWatchdog();
-
-    if (this.restartTimer) {
-      clearTimeout(this.restartTimer);
-      this.restartTimer = null;
-    }
-
-    this.sessionPersistentFinal = '';
-    this.lastEmittedTranscript = '';
     this.nativeAccumulatedFinal = '';
 
-    // Stop Native Android bridge if active
     const win = (typeof window !== 'undefined' ? window : {}) as IWindowWithSpeech;
     if (win.SaathiNative && typeof win.SaathiNative.stopSpeechRecognition === 'function') {
       try {
@@ -506,8 +294,11 @@ export class HybridSpeechRecognitionService {
     }
     this.cleanupNativeAndroidListeners();
 
-    // Destroy Web Speech API instance
-    this.destroyCurrentRecognition();
+    if (this.recognition) {
+      try {
+        this.recognition.stop();
+      } catch (_e) {}
+    }
 
     if (this.onEndCallback) {
       this.onEndCallback();
@@ -520,4 +311,3 @@ export class HybridSpeechRecognitionService {
 }
 
 export const speechService = new HybridSpeechRecognitionService();
-

@@ -259,7 +259,6 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
   const startLiveVoiceRecognition = useCallback(() => {
     setVoiceError(null);
     setSarvamStatus('transcribing');
-    const initialText = transcriptRef.current ? transcriptRef.current.trim() : '';
     const voiceMsgId = `voice-${Date.now()}`;
     currentVoiceMessageIdRef.current = voiceMsgId;
 
@@ -321,8 +320,7 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
           );
           currentVoiceMessageIdRef.current = null;
         }
-      },
-      initialText
+      }
     );
 
     if (started) {
