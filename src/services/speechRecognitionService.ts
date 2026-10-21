@@ -72,6 +72,7 @@ export class HybridSpeechRecognitionService {
   private onEndCallback: (() => void) | null = null;
   private currentLanguage: string = 'hi-IN';
   private accumulatedFromPreviousSessions: string = '';
+  private nativeAccumulatedFinal: string = '';
 
   // Native Android event listeners
   private nativeSpeechResultHandler: ((e: any) => void) | null = null;
@@ -230,10 +231,24 @@ export class HybridSpeechRecognitionService {
     this.nativeSpeechResultHandler = (e: any) => {
       const data = e.detail;
       if (data && data.transcript && this.onResultCallback) {
-        this.onResultCallback({
-          transcript: cleanDuplicateSpeech(data.transcript),
-          isFinal: Boolean(data.isFinal)
-        });
+        const text = (data.transcript || '').trim();
+        if (data.isFinal) {
+          this.nativeAccumulatedFinal = this.nativeAccumulatedFinal
+            ? `${this.nativeAccumulatedFinal} ${text}`.trim()
+            : text;
+          this.onResultCallback({
+            transcript: this.nativeAccumulatedFinal,
+            isFinal: true
+          });
+        } else {
+          const currentTotal = this.nativeAccumulatedFinal
+            ? `${this.nativeAccumulatedFinal} ${text}`.trim()
+            : text;
+          this.onResultCallback({
+            transcript: currentTotal,
+            isFinal: false
+          });
+        }
       }
     };
 
@@ -330,6 +345,7 @@ export class HybridSpeechRecognitionService {
 
   public stop(): void {
     this.isListeningState = false;
+    this.nativeAccumulatedFinal = '';
 
     // 1. Stop Native Android Recognizer if running
     const win = (typeof window !== 'undefined' ? window : {}) as IWindowWithSpeech;

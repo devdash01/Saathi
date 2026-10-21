@@ -160,6 +160,10 @@ public class MainActivity extends BridgeActivity {
                 intent.putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, false);
                 intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
                 intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
+                intent.putExtra("android.speech.extra.DICTATION_MODE", true);
+                intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 3000L);
+                intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 2500L);
+                intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 1500L);
 
                 speechRecognizer.setRecognitionListener(new RecognitionListener() {
                     @Override
@@ -179,7 +183,13 @@ public class MainActivity extends BridgeActivity {
 
                     @Override
                     public void onError(int error) {
-                        if (isNativeSpeechListening && (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT)) {
+                        if (!isNativeSpeechListening) return;
+
+                        // Auto-restart on speech pause or transient busy state
+                        if (error == SpeechRecognizer.ERROR_NO_MATCH ||
+                            error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT ||
+                            error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY ||
+                            error == SpeechRecognizer.ERROR_AUDIO) {
                             mainHandler.postDelayed(() -> {
                                 if (isNativeSpeechListening) {
                                     startNativeSpeechRecognizer(activeSpeechLanguage);
@@ -187,6 +197,17 @@ public class MainActivity extends BridgeActivity {
                             }, 200);
                             return;
                         }
+
+                        // On network timeout retry after short delay
+                        if (error == SpeechRecognizer.ERROR_NETWORK || error == SpeechRecognizer.ERROR_NETWORK_TIMEOUT) {
+                            mainHandler.postDelayed(() -> {
+                                if (isNativeSpeechListening) {
+                                    startNativeSpeechRecognizer(activeSpeechLanguage);
+                                }
+                            }, 600);
+                            return;
+                        }
+
                         sendSpeechErrorToWeb("Speech error: " + error);
                     }
 
