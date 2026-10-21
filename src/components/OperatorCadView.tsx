@@ -14,8 +14,7 @@ import {
   CheckCircle2,
   ShieldAlert,
   Users,
-  Share2,
-  Phone
+  Zap
 } from 'lucide-react';
 import { TacticalEmergencyMap } from './TacticalEmergencyMap';
 import { emergencyContactService } from '../services/emergencyContactService';
@@ -631,54 +630,31 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
                 </div>
 
                 {emergencyContacts[0] && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div>
                     <button
                       onClick={() => {
                         if (activeReport) {
-                          emergencyContactService.dispatchAlert(emergencyContacts[0], activeReport, 'whatsapp');
+                          emergencyContactService.dispatchUnifiedAlert(emergencyContacts[0], activeReport);
                         }
                       }}
                       style={{
-                        background: '#25D366',
+                        background: 'linear-gradient(135deg, #b91c1c 0%, #991b1b 100%)',
                         color: '#ffffff',
                         border: 'none',
                         borderRadius: '4px',
-                        padding: '4px 8px',
-                        fontSize: '0.62rem',
-                        fontWeight: 700,
+                        padding: '5px 10px',
+                        fontSize: '0.66rem',
+                        fontWeight: 800,
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '3px'
+                        gap: '4px',
+                        boxShadow: '0 2px 6px rgba(185, 28, 28, 0.35)'
                       }}
-                      title="Dispatch WhatsApp CAD Brief to Emergency Contact"
+                      title="Dispatch CAD emergency brief to WhatsApp & SMS simultaneously in 1 tap"
                     >
-                      <Share2 size={10} />
-                      <span>WhatsApp SOS</span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (activeReport) {
-                          emergencyContactService.dispatchAlert(emergencyContacts[0], activeReport, 'sms');
-                        }
-                      }}
-                      style={{
-                        background: '#0284c7',
-                        color: '#ffffff',
-                        border: 'none',
-                        borderRadius: '4px',
-                        padding: '4px 8px',
-                        fontSize: '0.62rem',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '3px'
-                      }}
-                      title="Dispatch SMS CAD Brief to Emergency Contact"
-                    >
-                      <Phone size={10} />
-                      <span>SMS SOS</span>
+                      <Zap size={11} />
+                      <span>Dispatch SOS (WhatsApp + SMS)</span>
                     </button>
                   </div>
                 )}
@@ -1578,46 +1554,30 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
                         </div>
                       </div>
 
-                      <div style={{ display: 'flex', gap: '4px' }}>
+                      <div>
                         <button
                           onClick={() => {
                             if (emergencyContacts[0] && activeReport) {
-                              emergencyContactService.dispatchAlert(emergencyContacts[0], activeReport, 'whatsapp');
+                              emergencyContactService.dispatchUnifiedAlert(emergencyContacts[0], activeReport);
                             }
                           }}
                           style={{
-                            background: '#25D366',
+                            background: 'linear-gradient(135deg, #b91c1c 0%, #991b1b 100%)',
                             color: '#ffffff',
                             border: 'none',
-                            padding: '5px 8px',
+                            padding: '6px 10px',
                             borderRadius: '4px',
-                            fontSize: '0.64rem',
+                            fontSize: '0.66rem',
                             fontWeight: 800,
-                            cursor: 'pointer'
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
                           }}
-                          title="Dispatch WhatsApp Alert to Emergency Contact"
+                          title="Dispatch SOS to WhatsApp & SMS simultaneously in 1 tap"
                         >
-                          WhatsApp
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (emergencyContacts[0] && activeReport) {
-                              emergencyContactService.dispatchAlert(emergencyContacts[0], activeReport, 'sms');
-                            }
-                          }}
-                          style={{
-                            background: '#0284c7',
-                            color: '#ffffff',
-                            border: 'none',
-                            padding: '5px 8px',
-                            borderRadius: '4px',
-                            fontSize: '0.64rem',
-                            fontWeight: 800,
-                            cursor: 'pointer'
-                          }}
-                          title="Dispatch SMS Alert to Emergency Contact"
-                        >
-                          SMS
+                          <Zap size={11} />
+                          <span>1-Tap SOS (WhatsApp + SMS)</span>
                         </button>
                       </div>
                     </div>
@@ -1631,7 +1591,7 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
                       onDispatchAgency('shelter');
                       onDispatchAgency('legalAid');
                       if (emergencyContacts[0] && activeReport) {
-                        emergencyContactService.dispatchAlert(emergencyContacts[0], activeReport, 'whatsapp');
+                        emergencyContactService.dispatchUnifiedAlert(emergencyContacts[0], activeReport);
                       }
                     }}
                     style={{

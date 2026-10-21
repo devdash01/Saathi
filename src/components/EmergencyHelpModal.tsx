@@ -8,7 +8,8 @@ import {
   Radio,
   Clock,
   ExternalLink,
-  Users
+  Users,
+  Zap
 } from 'lucide-react';
 import {
   VERIFIED_INDIAN_HELPLINES,
@@ -213,45 +214,39 @@ export const EmergencyHelpModal: React.FC<EmergencyHelpModalProps> = ({
                           <div style={{ fontSize: '0.68rem', color: '#475569' }}>{c.phone}</div>
                         </div>
 
-                        <div style={{ display: 'flex', gap: '6px' }}>
-                          <a
-                            href={waLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                        <div>
+                          <button
+                            onClick={() => {
+                              window.open(waLink, '_blank');
+                              try {
+                                const smsFrame = document.createElement('iframe');
+                                smsFrame.style.display = 'none';
+                                smsFrame.src = smsLink;
+                                document.body.appendChild(smsFrame);
+                                setTimeout(() => smsFrame.remove(), 2000);
+                              } catch {
+                                window.location.href = smsLink;
+                              }
+                            }}
                             style={{
-                              background: '#25D366',
+                              background: 'linear-gradient(135deg, #b91c1c 0%, #991b1b 100%)',
                               color: '#ffffff',
-                              padding: '6px 10px',
+                              border: 'none',
+                              padding: '7px 12px',
                               borderRadius: '6px',
-                              fontSize: '0.68rem',
+                              fontSize: '0.72rem',
                               fontWeight: 800,
-                              textDecoration: 'none',
+                              cursor: 'pointer',
                               display: 'flex',
                               alignItems: 'center',
-                              gap: '4px'
+                              gap: '5px',
+                              boxShadow: '0 2px 8px rgba(185, 28, 28, 0.35)'
                             }}
+                            title="Dispatch emergency message to WhatsApp and SMS together in 1 tap"
                           >
-                            <MessageSquare size={12} />
-                            <span>WhatsApp</span>
-                          </a>
-                          <a
-                            href={smsLink}
-                            style={{
-                              background: '#0284c7',
-                              color: '#ffffff',
-                              padding: '6px 10px',
-                              borderRadius: '6px',
-                              fontSize: '0.68rem',
-                              fontWeight: 800,
-                              textDecoration: 'none',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '4px'
-                            }}
-                          >
-                            <PhoneCall size={12} />
-                            <span>SMS</span>
-                          </a>
+                            <Zap size={13} />
+                            <span>1-Tap SOS (WhatsApp + SMS)</span>
+                          </button>
                         </div>
                       </div>
                     );

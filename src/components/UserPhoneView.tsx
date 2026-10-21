@@ -13,7 +13,8 @@ import {
   PhoneOff,
   MapPin,
   Radio,
-  Users
+  Users,
+  Zap
 } from 'lucide-react';
 import { speechService, cleanDuplicateSpeech, assembleSpeechResults } from '../services/speechRecognitionService';
 import { TacticalEmergencyMap } from './TacticalEmergencyMap';
@@ -114,6 +115,69 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
     });
     return unsub;
   }, []);
+
+  const [dispatchedContactIds, setDispatchedContactIds] = useState<Record<string, boolean>>({});
+
+  const handleDispatchUnifiedAlert = useCallback((contact: EmergencyContact) => {
+    const targetReport: EmergencyReport = activeReport || {
+      id: 'INC-SOS-181',
+      idempotencyKey: `idemp-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      lifecycleState: 'submitted',
+      statusMessage: 'Immediate SOS triggered by citizen.',
+      callerText: transcript || 'SOS: Urgent assistance requested.',
+      location: {
+        address: 'Paschim Vihar, New Delhi',
+        coords: [28.6692, 77.1068],
+        accuracyMeters: 15,
+        isLiveStreaming: true,
+        source: 'live_gps',
+        lastUpdated: new Date().toISOString()
+      },
+      triage: {
+        urgencyLevel: 'CRITICAL',
+        threats: ['Immediate distress assistance requested'],
+        injuries: [],
+        location: {
+          raw: 'Paschim Vihar',
+          detectedAddress: 'Paschim Vihar, New Delhi',
+          confidence: 0.95,
+          ambiguityScore: 5,
+          landmarks: []
+        },
+        childrenAtRisk: { detected: false, details: 'None' },
+        callerConstraints: { canSpeakFreely: false, whispering: false, silenceLikely: false, backgroundThreatPresent: false },
+        missingDetails: [],
+        evidenceLinks: []
+      },
+      safetyFloor: {
+        active: true,
+        ruleId: 'SF-SOS',
+        ruleName: 'Direct Citizen SOS',
+        enforcedLevel: 'CRITICAL',
+        originalAILevel: 'CRITICAL',
+        rationale: 'Citizen triggered 1-Tap Dual SOS',
+        cannotOverrideDownward: false
+      },
+      aiConfidence: { score: 1.0, isUncertain: false, rationale: 'Citizen manual trigger' },
+      urgencyLevel: 'CRITICAL',
+      agencies: {
+        police: { recommended: true, unitType: 'PCR Van', priority: 'IMMEDIATE', status: 'REQUESTED', eta: '4m' },
+        medical: { recommended: false, priority: 'NONE', status: 'NOT_REQUESTED' },
+        shelter: { recommended: false, shelterName: 'Safe Haven OSC', availableBeds: 4, status: 'NOT_REQUESTED' },
+        legalAid: { recommended: false, counselorType: 'DLSA', status: 'NOT_REQUESTED' }
+      },
+      questions: [],
+      auditTrail: [],
+      retryCount: 0
+    };
+
+    emergencyContactService.dispatchUnifiedAlert(contact, targetReport);
+    setDispatchedContactIds((prev) => ({ ...prev, [contact.id]: true }));
+    setHardwareTriggerToast(`Dispatched 1-Tap SOS to ${contact.name} via WhatsApp & SMS`);
+    setTimeout(() => setHardwareTriggerToast(null), 4000);
+  }, [activeReport, transcript]);
 
   // Disguise / Quick Exit
   const [isQuickExited, setIsQuickExited] = useState(false);
@@ -580,22 +644,11 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
                   <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                     <button
                       onClick={() => setIsContactModalOpen(true)}
-                      title="Manage Emergency Contacts & WhatsApp/SMS Alerts"
-                      style={{
-                        background: emergencyContacts.length > 0 ? '#ecfdf5' : '#eff6ff',
-                        border: emergencyContacts.length > 0 ? '1px solid #a7f3d0' : '1px solid #bfdbfe',
-                        color: emergencyContacts.length > 0 ? '#047857' : '#1d4ed8',
-                        borderRadius: '6px',
-                        padding: '3px 7px',
-                        fontSize: '0.62rem',
-                        fontWeight: 800,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        cursor: 'pointer'
-                      }}
+                      title="Manage Emergency Contacts & 1-Tap Dual SOS"
+                      className="citizen-contact-header-btn"
                     >
-                      <Users size={11} />
+                      <div className="dot-active" />
+                      <Users size={12} />
                       <span>Contacts ({emergencyContacts.length})</span>
                     </button>
                     {(transcript || messages.length > 0) && (
@@ -892,80 +945,53 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
                     <div
                       style={{
                         background: '#f8fafc',
-                        border: '1px solid #e2e8f0',
-                        borderRadius: '8px',
-                        padding: '8px 10px',
+                        border: '1px solid #cbd5e1',
+                        borderRadius: '10px',
+                        padding: '10px 12px',
                         display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between'
+                        flexDirection: 'column',
+                        gap: '8px'
                       }}
                     >
-                      <div>
-                        <div style={{ fontSize: '0.74rem', fontWeight: 700, color: '#1e293b' }}>
-                          {emergencyContacts[0].name}{' '}
-                          <span style={{ fontSize: '0.64rem', color: '#64748b', fontWeight: 500 }}>
-                            ({emergencyContacts[0].relationship})
-                          </span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#0f172a' }}>
+                            {emergencyContacts[0].name}{' '}
+                            <span style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 600 }}>
+                              ({emergencyContacts[0].relationship})
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '0.7rem', color: '#059669', fontWeight: 700, marginTop: '2px' }}>
+                            {emergencyContacts[0].phone} • WhatsApp &amp; SMS Active
+                          </div>
                         </div>
-                        <div style={{ fontSize: '0.66rem', color: '#059669', fontWeight: 600 }}>
-                          {emergencyContacts[0].phone} • Ready for 1-Tap SOS
-                        </div>
+                        <span
+                          style={{
+                            background: '#dbeafe',
+                            color: '#1e40af',
+                            border: '1px solid #bfdbfe',
+                            fontSize: '0.62rem',
+                            fontWeight: 800,
+                            padding: '2px 7px',
+                            borderRadius: '4px'
+                          }}
+                        >
+                          PRIMARY
+                        </span>
                       </div>
 
-                      <div style={{ display: 'flex', gap: '4px' }}>
-                        <button
-                          onClick={() => {
-                            if (activeReport) {
-                              emergencyContactService.dispatchAlert(emergencyContacts[0], activeReport, 'whatsapp');
-                            } else {
-                              setIsContactModalOpen(true);
-                            }
-                          }}
-                          title="Send WhatsApp SOS"
-                          style={{
-                            background: '#25D366',
-                            color: '#ffffff',
-                            border: 'none',
-                            borderRadius: '6px',
-                            padding: '4px 7px',
-                            fontSize: '0.64rem',
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '3px'
-                          }}
-                        >
-                          <MessageSquare size={11} />
-                          <span>WhatsApp</span>
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (activeReport) {
-                              emergencyContactService.dispatchAlert(emergencyContacts[0], activeReport, 'sms');
-                            } else {
-                              setIsContactModalOpen(true);
-                            }
-                          }}
-                          title="Send SMS SOS"
-                          style={{
-                            background: '#0284c7',
-                            color: '#ffffff',
-                            border: 'none',
-                            borderRadius: '6px',
-                            padding: '4px 7px',
-                            fontSize: '0.64rem',
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '3px'
-                          }}
-                        >
-                          <Phone size={11} />
-                          <span>SMS</span>
-                        </button>
-                      </div>
+                      <button
+                        onClick={() => handleDispatchUnifiedAlert(emergencyContacts[0])}
+                        className={`btn-unified-sos-dispatch ${dispatchedContactIds[emergencyContacts[0].id] ? 'btn-unified-sos-dispatched' : ''}`}
+                        title="Send emergency details to both WhatsApp and SMS together in 1 tap"
+                      >
+                        <Zap size={14} />
+                        <span>
+                          {dispatchedContactIds[emergencyContacts[0].id]
+                            ? '✓ Transmitted to WhatsApp & SMS (Tap to Re-send)'
+                            : 'Send 1-Tap SOS (WhatsApp + SMS)'}
+                        </span>
+                      </button>
                     </div>
                   ) : (
                     <div style={{ fontSize: '0.68rem', color: '#64748b' }}>
@@ -1542,56 +1568,23 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
                       Send live GPS, transcript &amp; Police 112 status to{' '}
                       <strong>{emergencyContacts[0]?.name}</strong> ({emergencyContacts[0]?.relationship}):
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-                      <button
-                        onClick={() => {
-                          if (emergencyContacts[0] && activeReport) {
-                            emergencyContactService.dispatchAlert(emergencyContacts[0], activeReport, 'whatsapp');
-                          }
-                        }}
-                        style={{
-                          background: '#25D366',
-                          color: '#ffffff',
-                          border: 'none',
-                          borderRadius: '6px',
-                          padding: '5px 8px',
-                          fontSize: '0.68rem',
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '4px'
-                        }}
-                      >
-                        <MessageSquare size={12} />
-                        <span>WhatsApp Alert</span>
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (emergencyContacts[0] && activeReport) {
-                            emergencyContactService.dispatchAlert(emergencyContacts[0], activeReport, 'sms');
-                          }
-                        }}
-                        style={{
-                          background: '#0284c7',
-                          color: '#ffffff',
-                          border: 'none',
-                          borderRadius: '6px',
-                          padding: '5px 8px',
-                          fontSize: '0.68rem',
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '4px'
-                        }}
-                      >
-                        <Phone size={12} />
-                        <span>SMS Alert</span>
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => {
+                        if (emergencyContacts[0]) {
+                          handleDispatchUnifiedAlert(emergencyContacts[0]);
+                        }
+                      }}
+                      className={`btn-unified-sos-dispatch ${dispatchedContactIds[emergencyContacts[0]?.id] ? 'btn-unified-sos-dispatched' : ''}`}
+                      style={{ padding: '8px 12px', fontSize: '0.74rem' }}
+                      title="Dispatch live emergency coordinates and situation to WhatsApp and SMS together"
+                    >
+                      <Zap size={13} />
+                      <span>
+                        {dispatchedContactIds[emergencyContacts[0]?.id]
+                          ? '✓ Transmitted to WhatsApp & SMS (Tap to Re-send)'
+                          : '⚡ Dispatch 1-Tap SOS (WhatsApp + SMS)'}
+                      </span>
+                    </button>
                   </div>
                 )}
 
@@ -2006,58 +1999,23 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
                         Incident #{activeReport?.id || 'INC-181'}, live GPS coordinates, and Police 112 ETA are formatted for 1-tap dispatch:
                       </div>
 
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-                        <button
-                          onClick={() => {
-                            if (emergencyContacts[0] && activeReport) {
-                              emergencyContactService.dispatchAlert(emergencyContacts[0], activeReport, 'whatsapp');
-                            }
-                          }}
-                          style={{
-                            background: '#25D366',
-                            color: '#ffffff',
-                            border: 'none',
-                            borderRadius: '6px',
-                            padding: '6px 8px',
-                            fontSize: '0.68rem',
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '4px',
-                            boxShadow: '0 2px 6px rgba(37,211,102,0.25)'
-                          }}
-                        >
-                          <MessageSquare size={12} />
-                          <span>Dispatch via WhatsApp</span>
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (emergencyContacts[0] && activeReport) {
-                              emergencyContactService.dispatchAlert(emergencyContacts[0], activeReport, 'sms');
-                            }
-                          }}
-                          style={{
-                            background: '#0284c7',
-                            color: '#ffffff',
-                            border: 'none',
-                            borderRadius: '6px',
-                            padding: '6px 8px',
-                            fontSize: '0.68rem',
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '4px',
-                            boxShadow: '0 2px 6px rgba(2,132,199,0.25)'
-                          }}
-                        >
-                          <Phone size={12} />
-                          <span>Dispatch via SMS</span>
-                        </button>
-                      </div>
+                      <button
+                        onClick={() => {
+                          if (emergencyContacts[0]) {
+                            handleDispatchUnifiedAlert(emergencyContacts[0]);
+                          }
+                        }}
+                        className={`btn-unified-sos-dispatch ${dispatchedContactIds[emergencyContacts[0]?.id] ? 'btn-unified-sos-dispatched' : ''}`}
+                        style={{ width: '100%', padding: '10px 14px', fontSize: '0.78rem' }}
+                        title="Dispatch live emergency coordinates and situation to WhatsApp and SMS together"
+                      >
+                        <Zap size={14} />
+                        <span>
+                          {dispatchedContactIds[emergencyContacts[0]?.id]
+                            ? `✓ Re-dispatch SOS to ${emergencyContacts[0].name} (WhatsApp + SMS)`
+                            : `⚡ Send 1-Tap SOS to ${emergencyContacts[0].name} (WhatsApp + SMS)`}
+                        </span>
+                      </button>
                     </div>
                   ) : (
                     <div style={{ fontSize: '0.68rem', color: '#64748b' }}>

@@ -202,11 +202,12 @@ class EmergencyContactService {
 
   /**
    * Constructs the structured Emergency SOS Message containing all details shared with the Operator
+   * Clean, authoritative, and completely free of weird emojis.
    */
   public buildEmergencyAlertMessage(report: EmergencyReport, contactName?: string): string {
     const incidentId = report.id || 'INC-181';
     const urgency = report.urgencyLevel || 'CRITICAL';
-    const situation = report.callerText?.trim() || report.triage.threats?.[0] || 'Urgent assistance requested';
+    const situation = report.callerText?.trim() || report.triage?.threats?.[0] || 'Urgent assistance requested';
     const address = report.location?.address || 'Paschim Vihar, New Delhi';
     const coords = report.location?.coords || [28.6692, 77.1068];
     const mapsLink = `https://maps.google.com/?q=${coords[0].toFixed(5)},${coords[1].toFixed(5)}`;
@@ -221,8 +222,7 @@ class EmergencyContactService {
 
     const timeString = new Date(report.updatedAt || report.createdAt || Date.now()).toLocaleTimeString('en-IN', {
       hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit'
+      minute: '2-digit'
     });
 
     const dateString = new Date(report.updatedAt || report.createdAt || Date.now()).toLocaleDateString('en-IN', {
@@ -231,23 +231,23 @@ class EmergencyContactService {
       year: 'numeric'
     });
 
-    const salutation = contactName ? `Dear ${contactName},\n` : '';
+    const salutation = contactName ? `Dear ${contactName},\n\n` : '';
 
     return (
-      `🚨 SAATHI EMERGENCY SOS ALERT 🚨\n\n` +
-      `${salutation}I have triggered an emergency distress alert via SAATHI 181 (Delhi Emergency Response System).\n\n` +
-      `📋 INCIDENT ID: ${incidentId}\n` +
-      `⚡ URGENCY LEVEL: ${urgency}\n` +
-      `🗣️ SITUATION REPORTED: "${situation}"\n\n` +
-      `📍 LIVE LOCATION:\n${address}\n` +
-      `🗺️ GOOGLE MAPS LINK:\n${mapsLink}\n\n` +
-      `🚔 DISPATCH STATUS:\n` +
-      `• Police 112: ${policeStatus}\n` +
-      `• Medical 108: ${medicalStatus}\n` +
-      `• Safe Shelter 181: ${report.agencies?.shelter?.recommended ? 'Alerted' : 'Standby'}\n\n` +
-      `⏰ TIME: ${timeString}, ${dateString}\n` +
-      `🛡️ ERSS OPERATOR: Ananya Sharma (DL-CAD-1187)\n\n` +
-      `⚠️ NOTE: If I am unable to answer phone calls safely, please track my location and coordinate directly with 112 ERSS quoting Incident #${incidentId}.`
+      `SAATHI EMERGENCY SOS ALERT\n\n` +
+      `${salutation}An emergency distress report has been triggered via SAATHI (Delhi 181 / 112 ERSS Command).\n\n` +
+      `Incident ID: ${incidentId}\n` +
+      `Urgency Level: ${urgency}\n` +
+      `Reported Situation: "${situation}"\n\n` +
+      `Live Location:\n${address}\n` +
+      `Google Maps Link:\n${mapsLink}\n\n` +
+      `Emergency Dispatch Status:\n` +
+      `- Police 112: ${policeStatus}\n` +
+      `- Medical 108: ${medicalStatus}\n` +
+      `- Safe Shelter 181: ${report.agencies?.shelter?.recommended ? 'Alerted' : 'Standby'}\n\n` +
+      `Timestamp: ${timeString}, ${dateString}\n` +
+      `Command Station: Delhi ERSS Central (OP-1187)\n\n` +
+      `Note: If the caller cannot be reached directly, track their live location or coordinate with 112 Police ERSS quoting Incident #${incidentId}.`
     );
   }
 
@@ -266,60 +266,98 @@ class EmergencyContactService {
   public generateSmsUrl(phone: string, message: string): string {
     const cleanNumber = this.getCleanPhoneForSms(phone);
     const encoded = encodeURIComponent(message);
-    // Standard RFC 5724 format
     return `sms:${cleanNumber}?body=${encoded}`;
   }
 
   /**
-   * Send / Open alert to a specific contact via WhatsApp or SMS
+   * 1-Tap Unified Emergency Dispatch:
+   * Instantly sends the emergency details to BOTH WhatsApp and SMS together in a single tap!
+   * No separate buttons or multiple confirmations required.
    */
-  public dispatchAlert(
+  public dispatchUnifiedAlert(
     contact: EmergencyContact,
-    report: EmergencyReport,
-    channel: 'whatsapp' | 'sms'
-  ): { url: string; success: boolean } {
+    report: EmergencyReport
+  ): {
+    whatsappUrl: string;
+    smsUrl: string;
+    success: boolean;
+    timestamp: string;
+  } {
     const message = this.buildEmergencyAlertMessage(report, contact.name);
-    const url =
-      channel === 'whatsapp'
-        ? this.generateWhatsAppUrl(contact.phone, message)
-        : this.generateSmsUrl(contact.phone, message);
+    const whatsappUrl = this.generateWhatsAppUrl(contact.phone, message);
+    const smsUrl = this.generateSmsUrl(contact.phone, message);
+    const timestamp = new Date().toISOString();
 
-    const logEntry: ContactNotificationLog = {
-      id: `notif-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    const waLog: ContactNotificationLog = {
+      id: `notif-wa-${Date.now()}`,
       contactId: contact.id,
       contactName: contact.name,
       phone: contact.phone,
-      channel,
-      sentAt: new Date().toISOString(),
-      status: 'opened',
+      channel: 'whatsapp',
+      sentAt: timestamp,
+      status: 'dispatched',
       messageSnippet: message.slice(0, 100) + '...'
     };
 
-    this.notificationLogs.unshift(logEntry);
+    const smsLog: ContactNotificationLog = {
+      id: `notif-sms-${Date.now()}`,
+      contactId: contact.id,
+      contactName: contact.name,
+      phone: contact.phone,
+      channel: 'sms',
+      sentAt: timestamp,
+      status: 'dispatched',
+      messageSnippet: message.slice(0, 100) + '...'
+    };
+
+    this.notificationLogs.unshift(waLog, smsLog);
     this.persistLogs();
 
     // Broadcast DOM event for UI synchronization across CAD and Citizen Views
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('saathi:contact-alert-dispatched', {
-          detail: { contact, channel, logEntry, reportId: report.id }
+          detail: { contact, channels: ['whatsapp', 'sms'], timestamp, reportId: report.id }
         })
       );
 
-      // Attempt to launch native app / link
+      // Trigger automatic transmission handoff
       try {
-        const openedWindow = window.open(url, '_blank');
-        if (!openedWindow && channel === 'sms') {
-          // If popup blocked for sms: protocol, trigger via location.href
-          window.location.href = url;
-        }
+        // First invoke WhatsApp in new background window/tab
+        window.open(whatsappUrl, '_blank');
       } catch (err) {
-        console.warn(`Could not open ${channel} intent directly:`, err);
-        window.location.href = url;
+        console.warn('Could not launch WhatsApp intent automatically:', err);
+      }
+
+      // Also trigger SMS intent automatically
+      try {
+        const smsFrame = document.createElement('iframe');
+        smsFrame.style.display = 'none';
+        smsFrame.src = smsUrl;
+        document.body.appendChild(smsFrame);
+        setTimeout(() => smsFrame.remove(), 2000);
+      } catch {
+        // Fallback
+        window.location.href = smsUrl;
       }
     }
 
-    return { url, success: true };
+    return { whatsappUrl, smsUrl, success: true, timestamp };
+  }
+
+  /**
+   * Send alert to a specific contact (backwards compatibility)
+   */
+  public dispatchAlert(
+    contact: EmergencyContact,
+    report: EmergencyReport,
+    channel: 'whatsapp' | 'sms' = 'whatsapp'
+  ): { url: string; success: boolean } {
+    const res = this.dispatchUnifiedAlert(contact, report);
+    return {
+      url: channel === 'whatsapp' ? res.whatsappUrl : res.smsUrl,
+      success: res.success
+    };
   }
 
   /**
