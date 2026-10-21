@@ -149,6 +149,17 @@ public class MainActivity extends BridgeActivity {
         startNativeSpeechRecognizer(lang, null);
     }
 
+    private Intent createSpeechIntent() {
+        Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, activeSpeechLanguage);
+        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, activeSpeechLanguage);
+        intent.putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, false);
+        intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
+        intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
+        return intent;
+    }
+
     private void startNativeSpeechRecognizer(String lang, String initialText) {
         runOnUiThread(() -> {
             try {
@@ -171,91 +182,95 @@ public class MainActivity extends BridgeActivity {
                     return;
                 }
 
-                Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
-                intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-                intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, activeSpeechLanguage);
-                intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, activeSpeechLanguage);
-                intent.putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, false);
-                intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
-                intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
+                isNativeSpeechListening = true;
+                restartNativeSpeechSession();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
+    }
 
-                if (speechRecognizer == null) {
-                    speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
-                    speechRecognizer.setRecognitionListener(new RecognitionListener() {
-                        @Override
-                        public void onReadyForSpeech(Bundle params) {}
+    private void restartNativeSpeechSession() {
+        runOnUiThread(() -> {
+            if (!isNativeSpeechListening) return;
 
-                        @Override
-                        public void onBeginningOfSpeech() {}
-
-                        @Override
-                        public void onRmsChanged(float rmsdB) {}
-
-                        @Override
-                        public void onBufferReceived(byte[] buffer) {}
-
-                        @Override
-                        public void onEndOfSpeech() {}
-
-                        @Override
-                        public void onError(int error) {
-                            if (!isNativeSpeechListening) return;
-
-                            // Auto-restart on speech pause or silence timeout
-                            mainHandler.postDelayed(() -> {
-                                if (isNativeSpeechListening && speechRecognizer != null) {
-                                    try {
-                                        speechRecognizer.cancel();
-                                        speechRecognizer.startListening(intent);
-                                    } catch (Exception ignored) {
-                                        startNativeSpeechRecognizer(activeSpeechLanguage, null);
-                                    }
-                                }
-                            }, 80);
-                        }
-
-                        @Override
-                        public void onResults(Bundle results) {
-                            ArrayList<String> matches = results != null ? results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION) : null;
-                            if (matches != null && !matches.isEmpty()) {
-                                String finalSentence = matches.get(0).trim();
-                                if (!finalSentence.isEmpty()) {
-                                    accumulatedSentences = accumulatedSentences.isEmpty() ? finalSentence : (accumulatedSentences + ". " + finalSentence);
-                                    sendSpeechResultToWeb(accumulatedSentences, true);
-                                }
-                            }
-                            if (isNativeSpeechListening && speechRecognizer != null) {
-                                mainHandler.postDelayed(() -> {
-                                    if (isNativeSpeechListening && speechRecognizer != null) {
-                                        try {
-                                            speechRecognizer.startListening(intent);
-                                        } catch (Exception ignored) {
-                                            startNativeSpeechRecognizer(activeSpeechLanguage, null);
-                                        }
-                                    }
-                                }, 60);
-                            }
-                        }
-
-                        @Override
-                        public void onPartialResults(Bundle partialResults) {
-                            ArrayList<String> matches = partialResults != null ? partialResults.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION) : null;
-                            if (matches != null && !matches.isEmpty()) {
-                                String partial = matches.get(0).trim();
-                                if (!partial.isEmpty()) {
-                                    String live = accumulatedSentences.isEmpty() ? partial : (accumulatedSentences + ". " + partial);
-                                    sendSpeechResultToWeb(live, false);
-                                }
-                            }
-                        }
-
-                        @Override
-                        public void onEvent(int eventType, Bundle params) {}
-                    });
+            try {
+                if (speechRecognizer != null) {
+                    try {
+                        speechRecognizer.destroy();
+                    } catch (Exception ignored) {}
+                    speechRecognizer = null;
                 }
 
-                isNativeSpeechListening = true;
-                speechRecognizer.cancel();
+                if (!isNativeSpeechListening) return;
+
+                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
+                speechRecognizer.setRecognitionListener(new RecognitionListener() {
+                    @Override
+                    public void onReadyForSpeech(Bundle params) {}
+
+                    @Override
+                    public void onBeginningOfSpeech() {}
+
+                    @Override
+                    public void onRmsChanged(float rmsdB) {}
+
+                    @Override
+                    public void onBufferReceived(byte[] buffer) {}
+
+                    @Override
+                    public void onEndOfSpeech() {}
+
+                    @Override
+                    public void onError(int error) {
+                        if (!isNativeSpeechListening) return;
+
+                        // Auto-revive cleanly on speech pauses or transient errors
+                        mainHandler.postDelayed(() -> {
+                            if (isNativeSpeechListening) {
+                                restartNativeSpeechSession();
+                            }
+                        }, 80);
+                    }
+
+                    @Override
+                    public void onResults(Bundle results) {
+                        ArrayList<String> matches = results != null ? results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION) : null;
+                        if (matches != null && !matches.isEmpty()) {
+                            String finalSentence = matches.get(0).trim();
+                            if (!finalSentence.isEmpty()) {
+                                accumulatedSentences = accumulatedSentences.isEmpty() ? finalSentence : (accumulatedSentences + ". " + finalSentence);
+                                sendSpeechResultToWeb(accumulatedSentences, true);
+                            }
+                        }
+
+                        // Recreate recognizer immediately for the next utterance without Error 8 lockup
+                        if (isNativeSpeechListening) {
+                            mainHandler.postDelayed(() -> {
+                                if (isNativeSpeechListening) {
+                                    restartNativeSpeechSession();
+                                }
+                            }, 50);
+                        }
+                    }
+
+                    @Override
+                    public void onPartialResults(Bundle partialResults) {
+                        ArrayList<String> matches = partialResults != null ? partialResults.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION) : null;
+                        if (matches != null && !matches.isEmpty()) {
+                            String partial = matches.get(0).trim();
+                            if (!partial.isEmpty()) {
+                                String live = accumulatedSentences.isEmpty() ? partial : (accumulatedSentences + ". " + partial);
+                                sendSpeechResultToWeb(live, false);
+                            }
+                        }
+                    }
+
+                    @Override
+                    public void onEvent(int eventType, Bundle params) {}
+                });
+
+                Intent intent = createSpeechIntent();
                 speechRecognizer.startListening(intent);
             } catch (Exception e) {
                 e.printStackTrace();
