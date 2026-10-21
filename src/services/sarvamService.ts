@@ -25,6 +25,8 @@ export interface SarvamTranslateResponse {
   latencyMs?: number;
 }
 
+let quotaExhaustedUntil: number = 0;
+
 /**
  * Translate Hindi / Hinglish / Indic text to English using Sarvam AI Translate API
  */
@@ -33,6 +35,19 @@ export async function translateTextWithSarvam(
   targetLang: string = 'en-IN'
 ): Promise<SarvamTranslateResponse> {
   const startTime = performance.now();
+  if (!text || text.trim().length === 0) {
+    return { translated_text: '', source_language_code: 'hi-IN', latencyMs: 0 };
+  }
+
+  // Circuit breaker: If quota was exhausted recently, skip network calls to prevent browser freezing
+  if (Date.now() < quotaExhaustedUntil) {
+    return {
+      translated_text: text,
+      source_language_code: 'hi-IN',
+      latencyMs: 0
+    };
+  }
+
   const payload = {
     input: text,
     source_language_code: 'auto',
@@ -58,6 +73,12 @@ export async function translateTextWithSarvam(
         body: JSON.stringify(payload)
       });
 
+      if (res.status === 402) {
+        // Quota exhausted - activate circuit breaker for 10 minutes
+        quotaExhaustedUntil = Date.now() + 10 * 60 * 1000;
+        break;
+      }
+
       if (!res.ok) {
         const errorText = await res.text();
         throw new Error(`Sarvam Translate HTTP ${res.status}: ${errorText}`);
@@ -71,15 +92,15 @@ export async function translateTextWithSarvam(
         source_language_code: json.source_language_code || 'hi-IN',
         latencyMs
       };
-    } catch (err: unknown) {
-      console.warn(`Translation attempt with ${url} failed:`, err);
+    } catch (_err: unknown) {
+      // Non-blocking fallback
     }
   }
 
-  // Graceful fallback if network is completely offline
+  // Graceful fallback if offline or quota exhausted
   return {
     translated_text: text,
-    source_language_code: 'unknown',
+    source_language_code: 'hi-IN',
     latencyMs: Math.round(performance.now() - startTime)
   };
 }

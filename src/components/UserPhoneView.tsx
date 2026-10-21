@@ -17,7 +17,7 @@ import {
   Zap,
   Copy
 } from 'lucide-react';
-import { speechService, cleanDuplicateSpeech, assembleSpeechResults } from '../services/speechRecognitionService';
+import { speechService } from '../services/speechRecognitionService';
 import { TacticalEmergencyMap } from './TacticalEmergencyMap';
 import { deviceLocationService } from '../services/deviceLocationService';
 import { emergencyContactService } from '../services/emergencyContactService';
@@ -222,14 +222,12 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
 
   // Sync incoming text from parent without overriding user's active session
   useEffect(() => {
-    if (currentInputText) {
-      const cleaned = cleanDuplicateSpeech(currentInputText);
-      if (cleaned && cleaned !== transcriptRef.current) {
-        setTranscript(cleaned);
-        transcriptRef.current = cleaned;
-      }
+    if (isVoiceListening) return; // CRITICAL: Never override while user is actively speaking!
+    if (currentInputText && currentInputText !== transcriptRef.current) {
+      setTranscript(currentInputText);
+      transcriptRef.current = currentInputText;
     }
-  }, [currentInputText]);
+  }, [currentInputText, isVoiceListening]);
 
   const hasAutoAcquiredGpsRef = useRef(false);
   const onGpsLocationAcquiredRef = useRef(onGpsLocationAcquired);
@@ -261,7 +259,7 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
   const startLiveVoiceRecognition = useCallback(() => {
     setVoiceError(null);
     setSarvamStatus('transcribing');
-    const baseText = transcriptRef.current ? cleanDuplicateSpeech(transcriptRef.current.trim()) : '';
+    const baseText = transcriptRef.current ? transcriptRef.current.trim() : '';
     const voiceMsgId = `voice-${Date.now()}`;
     currentVoiceMessageIdRef.current = voiceMsgId;
 
@@ -271,7 +269,7 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
         if (!spoken) return;
         const formatted = isWhisperMode && !spoken.includes('[whisper]') ? `[whisper] ${spoken}` : spoken;
 
-        const accumulated = baseText ? `${baseText} ${formatted}`.trim() : formatted;
+        const accumulated = baseText ? `${baseText}. ${formatted}` : formatted;
 
         setTranscript(accumulated);
         transcriptRef.current = accumulated;
@@ -482,14 +480,8 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
       { sender: 'user', text: val, time: timeNow }
     ]);
 
-    const currentT = transcriptRef.current ? cleanDuplicateSpeech(transcriptRef.current.trim()) : '';
-    let updated: string;
-    if (!currentT) {
-      updated = val;
-    } else {
-      updated = assembleSpeechResults([currentT, val]);
-    }
-    updated = cleanDuplicateSpeech(updated);
+    const currentT = transcriptRef.current ? transcriptRef.current.trim() : '';
+    const updated = currentT ? `${currentT}. ${val}` : val;
 
     setTranscript(updated);
     transcriptRef.current = updated;
@@ -1595,7 +1587,7 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
                             ...prev,
                             { sender: 'user', text: chip, time: timeNow }
                           ]);
-                          const updated = cleanDuplicateSpeech(transcript ? assembleSpeechResults([transcript, chip]) : chip);
+                          const updated = transcript ? `${transcript}. ${chip}` : chip;
                           setTranscript(updated);
                           transcriptRef.current = updated;
                           onUserInputChange(updated);

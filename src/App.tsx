@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useTransition } from 'react';
+import { useState, useEffect, useCallback, useTransition, useRef } from 'react';
 import { UserPhoneView } from './components/UserPhoneView';
 import { OperatorCadView } from './components/OperatorCadView';
 import type { AgencyDispatchState, UrgencyLevel, SafeSignalQuestion } from './types';
@@ -92,6 +92,7 @@ export function App() {
   const [sarvamStatus, setSarvamStatus] = useState<'connected' | 'transcribing' | 'idle' | 'error'>('connected');
   const [sarvamLatency] = useState<number>(280);
   const [dispatchAlertToast, setDispatchAlertToast] = useState<string | null>(null);
+  const translationDebounceRef = useRef<number | null>(null);
 
   // Cloud Real-Time Sync State (Mobile Data & Global Cross-Device Link)
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('disconnected');
@@ -323,19 +324,24 @@ export function App() {
         });
       }
 
-      // G. Background async refinement: Sarvam translation & Nominatim GIS geocoding (non-blocking)
-      translateTextWithSarvam(text)
-        .then((transRes) => {
-          if (transRes.translated_text && transRes.translated_text !== text) {
-            setActiveReport((prev) => {
-              if (prev.callerText !== text) return prev;
-              const refined = { ...prev, translatedText: transRes.translated_text };
-              reportStorageService.saveReportLocally(refined).catch(() => {});
-              return refined;
-            });
-          }
-        })
-        .catch(() => {});
+      // G. Background async refinement: Debounced Sarvam translation (non-blocking)
+      if (translationDebounceRef.current) {
+        window.clearTimeout(translationDebounceRef.current);
+      }
+      translationDebounceRef.current = window.setTimeout(() => {
+        translateTextWithSarvam(text)
+          .then((transRes) => {
+            if (transRes.translated_text && transRes.translated_text !== text) {
+              setActiveReport((prev) => {
+                if (prev.callerText !== text) return prev;
+                const refined = { ...prev, translatedText: transRes.translated_text };
+                reportStorageService.saveReportLocally(refined).catch(() => {});
+                return refined;
+              });
+            }
+          })
+          .catch(() => {});
+      }, 1200);
 
       geocodeAndFetchNearbyServices(loc.locality)
         .then((geo) => {
