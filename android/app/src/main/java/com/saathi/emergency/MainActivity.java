@@ -41,7 +41,8 @@ public class MainActivity extends BridgeActivity {
 
     private SpeechRecognizer speechRecognizer = null;
     private boolean isNativeSpeechListening = false;
-    private String activeSpeechLanguage = "en-IN";
+    private String activeSpeechLanguage = "hi-IN";
+    private String accumulatedSentences = "";
     private TextToSpeech nativeTTS = null;
 
     @Override
@@ -145,6 +146,10 @@ public class MainActivity extends BridgeActivity {
     }
 
     private void startNativeSpeechRecognizer(String lang) {
+        startNativeSpeechRecognizer(lang, null);
+    }
+
+    private void startNativeSpeechRecognizer(String lang, String initialText) {
         runOnUiThread(() -> {
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -155,7 +160,11 @@ public class MainActivity extends BridgeActivity {
                     }
                 }
 
-                activeSpeechLanguage = (lang != null && (lang.equals("Hindi") || lang.equals("hi-IN"))) ? "hi-IN" : "en-IN";
+                activeSpeechLanguage = (lang != null && (lang.equals("English") || lang.equals("en-IN"))) ? "en-IN" : "hi-IN";
+
+                if (initialText != null && !initialText.trim().isEmpty()) {
+                    accumulatedSentences = initialText.trim();
+                }
 
                 if (!SpeechRecognizer.isRecognitionAvailable(this)) {
                     sendSpeechErrorToWeb("Speech recognition not available on this device");
@@ -192,24 +201,28 @@ public class MainActivity extends BridgeActivity {
                         public void onError(int error) {
                             if (!isNativeSpeechListening) return;
 
-                            // Auto-restart on speech pause or transient state without destroying recognizer
+                            // Auto-restart on speech pause or silence timeout
                             mainHandler.postDelayed(() -> {
                                 if (isNativeSpeechListening && speechRecognizer != null) {
                                     try {
                                         speechRecognizer.cancel();
                                         speechRecognizer.startListening(intent);
                                     } catch (Exception ignored) {
-                                        startNativeSpeechRecognizer(activeSpeechLanguage);
+                                        startNativeSpeechRecognizer(activeSpeechLanguage, null);
                                     }
                                 }
-                            }, 100);
+                            }, 80);
                         }
 
                         @Override
                         public void onResults(Bundle results) {
                             ArrayList<String> matches = results != null ? results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION) : null;
                             if (matches != null && !matches.isEmpty()) {
-                                sendSpeechResultToWeb(matches.get(0), true);
+                                String finalSentence = matches.get(0).trim();
+                                if (!finalSentence.isEmpty()) {
+                                    accumulatedSentences = accumulatedSentences.isEmpty() ? finalSentence : (accumulatedSentences + ". " + finalSentence);
+                                    sendSpeechResultToWeb(accumulatedSentences, true);
+                                }
                             }
                             if (isNativeSpeechListening && speechRecognizer != null) {
                                 mainHandler.postDelayed(() -> {
@@ -217,10 +230,10 @@ public class MainActivity extends BridgeActivity {
                                         try {
                                             speechRecognizer.startListening(intent);
                                         } catch (Exception ignored) {
-                                            startNativeSpeechRecognizer(activeSpeechLanguage);
+                                            startNativeSpeechRecognizer(activeSpeechLanguage, null);
                                         }
                                     }
-                                }, 80);
+                                }, 60);
                             }
                         }
 
@@ -228,7 +241,11 @@ public class MainActivity extends BridgeActivity {
                         public void onPartialResults(Bundle partialResults) {
                             ArrayList<String> matches = partialResults != null ? partialResults.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION) : null;
                             if (matches != null && !matches.isEmpty()) {
-                                sendSpeechResultToWeb(matches.get(0), false);
+                                String partial = matches.get(0).trim();
+                                if (!partial.isEmpty()) {
+                                    String live = accumulatedSentences.isEmpty() ? partial : (accumulatedSentences + ". " + partial);
+                                    sendSpeechResultToWeb(live, false);
+                                }
                             }
                         }
 
@@ -320,7 +337,17 @@ public class MainActivity extends BridgeActivity {
 
         @JavascriptInterface
         public void startSpeechRecognition(String lang) {
-            startNativeSpeechRecognizer(lang);
+            startNativeSpeechRecognizer(lang, null);
+        }
+
+        @JavascriptInterface
+        public void startSpeechRecognition(String lang, String initialText) {
+            startNativeSpeechRecognizer(lang, initialText);
+        }
+
+        @JavascriptInterface
+        public void resetSpeechAccumulator() {
+            accumulatedSentences = "";
         }
 
         @JavascriptInterface
