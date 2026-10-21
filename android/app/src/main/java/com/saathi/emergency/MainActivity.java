@@ -21,6 +21,7 @@ import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
 import android.webkit.PermissionRequest;
+import android.webkit.GeolocationPermissions;
 import com.getcapacitor.BridgeWebChromeClient;
 import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
@@ -132,6 +133,12 @@ public class MainActivity extends BridgeActivity {
                 }
                 if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
                     missing.add(android.Manifest.permission.RECORD_AUDIO);
+                }
+                if (checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                    missing.add(android.Manifest.permission.ACCESS_FINE_LOCATION);
+                }
+                if (checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                    missing.add(android.Manifest.permission.ACCESS_COARSE_LOCATION);
                 }
                 if (!missing.isEmpty()) {
                     requestPermissions(missing.toArray(new String[0]), 101);
@@ -325,7 +332,7 @@ public class MainActivity extends BridgeActivity {
                 WebView webView = bridge.getWebView();
                 webView.addJavascriptInterface(new NativeSaathiBridge(), "SaathiNative");
 
-                // Seamlessly grant Web Speech API / WebRTC audio capture permissions to WebView
+                // Seamlessly grant Web Speech API, Audio, and Geolocation permissions to WebView
                 webView.setWebChromeClient(new BridgeWebChromeClient(bridge) {
                     @Override
                     public void onPermissionRequest(final PermissionRequest request) {
@@ -336,6 +343,11 @@ public class MainActivity extends BridgeActivity {
                                 e.printStackTrace();
                             }
                         });
+                    }
+
+                    @Override
+                    public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback callback) {
+                        callback.invoke(origin, true, false);
                     }
                 });
             }

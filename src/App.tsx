@@ -88,6 +88,10 @@ export function App() {
 
   const [allReports, setAllReports] = useState<EmergencyReport[]>([activeReport]);
   const [nearbyServices, setNearbyServices] = useState<EmergencyServiceEntity[]>([]);
+  const nearbyServicesRef = useRef<EmergencyServiceEntity[]>(nearbyServices);
+  useEffect(() => {
+    nearbyServicesRef.current = nearbyServices;
+  }, [nearbyServices]);
   const [locationError, setLocationError] = useState<string | undefined>(undefined);
 
   const [sarvamStatus, setSarvamStatus] = useState<'connected' | 'transcribing' | 'idle' | 'error'>('connected');
@@ -165,32 +169,105 @@ export function App() {
     return () => window.removeEventListener('saathi:hardware-mic-trigger', handleHwTrigger);
   }, []);
 
-  // 2. Initial Location Geocoding & GPS Acquisition
+  // 2. Live GPS Telemetry Fix Acquired (0ms ground truth)
+  const handleGpsLocationAcquired = useCallback(
+    async (coords: [number, number], accuracy: number, address?: string) => {
+      // Guard against identical coordinate re-dispatch to prevent re-render thrashing
+      const currentLoc = latestReportRef.current.location;
+      if (
+        currentLoc.source === 'live_gps' &&
+        currentLoc.coords &&
+        Math.abs(currentLoc.coords[0] - coords[0]) < 0.0001 &&
+        Math.abs(currentLoc.coords[1] - coords[1]) < 0.0001
+      ) {
+        return;
+      }
+
+      setLocationError(undefined);
+      let resolvedAddress = address || currentLoc.address;
+      if (!address) {
+        try {
+          resolvedAddress = await reverseGeocodeCoords(coords[0], coords[1]);
+        } catch (_e) {
+          resolvedAddress = `Live GPS (${coords[0].toFixed(4)}, ${coords[1].toFixed(4)})`;
+        }
+      }
+
+      const nearby = getNearbyServicesForCoordinates(coords[0], coords[1], resolvedAddress);
+      setNearbyServices(nearby);
+      fetchLiveNearbyFacilities(coords[0], coords[1], resolvedAddress).then((liveNearby) => {
+        if (liveNearby && liveNearby.length > 0) {
+          setNearbyServices(liveNearby);
+        }
+      }).catch(() => {});
+
+      setActiveReport((prev) => {
+        const updated: EmergencyReport = {
+          ...prev,
+          location: {
+            ...prev.location,
+            address: resolvedAddress,
+            coords: coords,
+            accuracyMeters: accuracy,
+            source: 'live_gps',
+            isLiveStreaming: true,
+            lastUpdated: new Date().toISOString()
+          },
+          auditTrail: [
+            ...prev.auditTrail,
+            {
+              id: `audit-${Date.now()}`,
+              timestamp: new Date().toISOString(),
+              actor: 'citizen',
+              action: 'GPS_LIVE_TELEMETRY_STREAMING',
+              details: `Live browser GPS fix acquired: ${coords[0].toFixed(5)}, ${coords[1].toFixed(5)} (±${accuracy}m accuracy). Coordinates synced with CAD map.`
+            }
+          ]
+        };
+        latestReportRef.current = updated;
+        reportStorageService.saveReportLocally(updated).catch(console.warn);
+        return updated;
+      });
+
+      setDispatchAlertToast(`Live GPS Acquired: ${resolvedAddress} (±${accuracy}m)`);
+      setTimeout(() => setDispatchAlertToast(null), 3500);
+
+      // CRITICAL: Broadcast real-time GPS telemetry to the Operator CAD console!
+      cloudSyncService.broadcast('phone', 'LOCATION_UPDATE', {
+        isLiveStreaming: true,
+        coords: coords,
+        address: resolvedAddress,
+        accuracy: accuracy,
+        nearbyServices: nearby
+      });
+    },
+    []
+  );
+
+  // 2b. Initial Location Geocoding & Continuous GPS Acquisition
   useEffect(() => {
-    // Acquire real GPS if supported
+    // Continuous GPS telemetry subscription
+    const unsub = deviceLocationService.subscribe((loc: DeviceLocationResult) => {
+      if (loc.error) {
+        setLocationError(loc.error);
+      }
+      if ((loc.source === 'live_gps' || loc.source === 'gps_cached') && loc.coords) {
+        handleGpsLocationAcquired(loc.coords, loc.accuracyMeters, loc.address);
+      }
+    });
+
+    // Acquire initial real GPS
     deviceLocationService.acquireGpsFix().then((loc: DeviceLocationResult) => {
       if (loc.error) {
         setLocationError(loc.error);
       }
-      if (loc.source === 'live_gps') {
-        setActiveReport((prev) => ({
-          ...prev,
-          location: {
-            ...prev.location,
-            coords: loc.coords,
-            accuracyMeters: loc.accuracyMeters,
-            source: 'live_gps',
-            lastUpdated: loc.timestamp
-          }
-        }));
+      if ((loc.source === 'live_gps' || loc.source === 'gps_cached') && loc.coords) {
+        handleGpsLocationAcquired(loc.coords, loc.accuracyMeters, loc.address);
       }
     });
 
-    // Geocode initial locality
-    geocodeAndFetchNearbyServices('Rohini Sector 16, New Delhi').then((geo) => {
-      setNearbyServices(geo.nearbyServices);
-    });
-  }, []);
+    return unsub;
+  }, [handleGpsLocationAcquired]);
 
   // 3. Handle live user phone input (Voice recording, Presets, Direct typing, Audio upload)
   // FULLY REAL-TIME & SYNCHRONOUS: Updates map, questions, and CAD immediately in 0ms!
@@ -214,6 +291,8 @@ export function App() {
       let coords: [number, number];
       let resolvedAddress: string;
 
+      const hasLiveGps = !remoteLocation && activeReport.location.source === 'live_gps' && !!activeReport.location.coords;
+
       if (remoteLocation && remoteLocation.coords && remoteLocation.coords.length === 2) {
         coords = remoteLocation.coords;
         resolvedAddress = remoteLocation.address || loc.locality;
@@ -223,13 +302,14 @@ export function App() {
           const nearby = getNearbyServicesForCoordinates(coords[0], coords[1], resolvedAddress);
           setNearbyServices(nearby);
         }
+      } else if (hasLiveGps) {
+        // GROUND TRUTH PROTECTION: Live hardware GPS fix must NEVER be overridden by speech regex!
+        coords = activeReport.location.coords;
+        resolvedAddress = activeReport.location.address;
       } else if (loc.isFound) {
         coords = [instantGeo.lat, instantGeo.lon];
         resolvedAddress = loc.locality;
         setNearbyServices(instantGeo.nearbyServices);
-      } else if (activeReport.location.source === 'live_gps' && activeReport.location.coords) {
-        coords = activeReport.location.coords;
-        resolvedAddress = activeReport.location.address;
       } else {
         coords = [instantGeo.lat, instantGeo.lon];
         resolvedAddress = loc.locality;
@@ -270,13 +350,13 @@ export function App() {
 
       // C & D. SYNCHRONOUS STATE UPDATE: Triggers immediate re-render of Map, Questions, and Triage
       setActiveReport((prev) => {
-        const isLocSpeech = loc.isFound;
-        const accuracyMeters = isLocSpeech
-          ? 1500
-          : (prev.location?.source === 'live_gps' ? (prev.location?.accuracyMeters || 15) : 1500);
-        const locationSource = isLocSpeech
-          ? 'speech_extracted'
-          : (prev.location?.source || 'speech_extracted');
+        const isLocSpeech = loc.isFound && !hasLiveGps;
+        const accuracyMeters = hasLiveGps
+          ? (prev.location?.accuracyMeters || 15)
+          : (isLocSpeech ? 1500 : 1500);
+        const locationSource = hasLiveGps
+          ? 'live_gps'
+          : (isLocSpeech ? 'speech_extracted' : (prev.location?.source || 'speech_extracted'));
 
         // Only record audit entry on finalized commits when text actually changed
         const shouldAddAudit = isFinal && prev.callerText !== text;
@@ -322,7 +402,9 @@ export function App() {
         return nextReport;
       });
 
-      setNearbyServices(instantGeo.nearbyServices);
+      if (!hasLiveGps && !remoteLocation) {
+        setNearbyServices(instantGeo.nearbyServices);
+      }
       setAllReports((prev) => {
         const currentReport = latestReportRef.current;
         const idx = prev.findIndex((r) => r.id === currentReport.id);
@@ -351,7 +433,7 @@ export function App() {
             audioUrl,
             callerAnswers,
             location: reportToPersist.location,
-            nearbyServices: instantGeo.nearbyServices
+            nearbyServices: reportToPersist.location.source === 'live_gps' ? nearbyServicesRef.current : instantGeo.nearbyServices
           });
         }
       }, 350);
@@ -375,25 +457,28 @@ export function App() {
           .catch(() => {});
       }, 1200);
 
-      geocodeAndFetchNearbyServices(loc.locality)
-        .then((geo) => {
-          if (geo && (geo.lat !== coords[0] || geo.lon !== coords[1])) {
-            setActiveReport((prev) => {
-              if (prev.callerText !== text) return prev;
-              const refined = {
-                ...prev,
-                location: {
-                  ...prev.location,
-                  coords: [geo.lat, geo.lon] as [number, number]
-                }
-              };
-              reportStorageService.saveReportLocally(refined).catch(() => {});
-              return refined;
-            });
-            setNearbyServices(geo.nearbyServices);
-          }
-        })
-        .catch(() => {});
+      // Only perform background OSM geocoding when NOT on live GPS and NOT remote sync
+      if (!isRemoteSync && !hasLiveGps && loc.isFound) {
+        geocodeAndFetchNearbyServices(loc.locality)
+          .then((geo) => {
+            if (geo && (geo.lat !== coords[0] || geo.lon !== coords[1])) {
+              setActiveReport((prev) => {
+                if (prev.callerText !== text || prev.location.source === 'live_gps') return prev;
+                const refined = {
+                  ...prev,
+                  location: {
+                    ...prev.location,
+                    coords: [geo.lat, geo.lon] as [number, number]
+                  }
+                };
+                reportStorageService.saveReportLocally(refined).catch(() => {});
+                return refined;
+              });
+              setNearbyServices(geo.nearbyServices);
+            }
+          })
+          .catch(() => {});
+      }
     },
     [activeReport, callerAnswers]
   );
@@ -450,76 +535,7 @@ export function App() {
     });
   };
 
-  // 4b. Live GPS Telemetry Fix Acquired
-  const handleGpsLocationAcquired = useCallback(
-    async (coords: [number, number], accuracy: number, address?: string) => {
-      // Guard against identical coordinate re-dispatch to prevent re-render thrashing
-      if (
-        activeReport.location.source === 'live_gps' &&
-        activeReport.location.coords &&
-        Math.abs(activeReport.location.coords[0] - coords[0]) < 0.0001 &&
-        Math.abs(activeReport.location.coords[1] - coords[1]) < 0.0001
-      ) {
-        return;
-      }
-
-      setLocationError(undefined);
-      let resolvedAddress = address || activeReport.location.address;
-      if (!address) {
-        try {
-          resolvedAddress = await reverseGeocodeCoords(coords[0], coords[1]);
-        } catch (_e) {
-          resolvedAddress = `Live GPS (${coords[0].toFixed(4)}, ${coords[1].toFixed(4)})`;
-        }
-      }
-
-      const nearby = getNearbyServicesForCoordinates(coords[0], coords[1], resolvedAddress);
-      setNearbyServices(nearby);
-      fetchLiveNearbyFacilities(coords[0], coords[1], resolvedAddress).then((liveNearby) => {
-        if (liveNearby && liveNearby.length > 0) {
-          setNearbyServices(liveNearby);
-        }
-      }).catch(() => {});
-
-      const updated: EmergencyReport = {
-        ...activeReport,
-        location: {
-          ...activeReport.location,
-          address: resolvedAddress,
-          coords: coords,
-          accuracyMeters: accuracy,
-          source: 'live_gps',
-          isLiveStreaming: true,
-          lastUpdated: new Date().toISOString()
-        },
-        auditTrail: [
-          ...activeReport.auditTrail,
-          {
-            id: `audit-${Date.now()}`,
-            timestamp: new Date().toISOString(),
-            actor: 'citizen',
-            action: 'GPS_LIVE_TELEMETRY_STREAMING',
-            details: `Live browser GPS fix acquired: ${coords[0].toFixed(5)}, ${coords[1].toFixed(5)} (±${accuracy}m accuracy). Coordinates synced with CAD map.`
-          }
-        ]
-      };
-
-      setActiveReport(updated);
-      await reportStorageService.saveReportLocally(updated);
-      setDispatchAlertToast(`Live GPS Acquired: ${resolvedAddress} (±${accuracy}m)`);
-      setTimeout(() => setDispatchAlertToast(null), 3500);
-
-      // CRITICAL: Broadcast real-time GPS telemetry to the Operator CAD console!
-      cloudSyncService.broadcast('phone', 'LOCATION_UPDATE', {
-        isLiveStreaming: true,
-        coords: coords,
-        address: resolvedAddress,
-        accuracy: accuracy,
-        nearbyServices: nearby
-      });
-    },
-    [activeReport.location.source, activeReport.location.coords, activeReport.location.address, activeReport.auditTrail]
-  );
+  // 4b. Live GPS Telemetry Fix Acquired (handled above in Step 2)
 
   // 5. Operator Acknowledges Report
   const handleAcknowledgeReport = async () => {
@@ -1020,6 +1036,37 @@ export function App() {
           }));
         } else if (evt.type === 'NEW_SESSION') {
           handleStartNewSession(true /* isRemoteSync */);
+        } else if (evt.type === 'REQUEST_SYNC') {
+          // If we have an active incident with caller text or real GPS fix, respond with full state
+          const currentRep = latestReportRef.current;
+          if (currentRep && (currentRep.callerText || currentRep.location.source === 'live_gps')) {
+            cloudSyncService.broadcast('cad', 'FULL_REPORT_SYNC', {
+              report: currentRep,
+              nearbyServices: nearbyServicesRef.current,
+              callerAnswers
+            });
+          }
+        } else if (evt.type === 'FULL_REPORT_SYNC') {
+          const { report: remoteReport, nearbyServices: remoteNearby, callerAnswers: remoteAnswers } = evt.payload;
+          if (remoteReport && remoteReport.id) {
+            setActiveReport((prev) => {
+              const localHasText = !!prev.callerText;
+              const remoteHasText = !!remoteReport.callerText;
+              if (remoteHasText || !localHasText) {
+                return remoteReport;
+              }
+              return prev;
+            });
+            latestReportRef.current = remoteReport;
+            if (remoteNearby && remoteNearby.length > 0) {
+              setNearbyServices(remoteNearby);
+            }
+            if (remoteAnswers) {
+              setCallerAnswers(remoteAnswers);
+            }
+            setDispatchAlertToast(`[Cloud Sync] Incident state mirrored across consoles.`);
+            setTimeout(() => setDispatchAlertToast(null), 3000);
+          }
         }
       });
     });

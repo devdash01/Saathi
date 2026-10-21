@@ -2,12 +2,11 @@
  * SAATHI Real-Time Cloud Sync Service
  * Connects Citizen Mobile App (on 4G/5G mobile data or Wi-Fi)
  * with Emergency Operator CAD Console across any network worldwide.
- * Uses secure MQTT over WebSockets (WSS).
+ * Uses secure MQTT over WebSockets (WSS) and local BroadcastChannel fallback.
  */
 
 import mqtt from 'mqtt';
 import type { MqttClient } from 'mqtt';
-
 
 export type SyncStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
 
@@ -25,6 +24,7 @@ export interface CloudSyncEvent {
     | 'SEND_QUESTION'
     | 'URGENCY_OVERRIDE'
     | 'NEW_SESSION'
+    | 'REQUEST_SYNC'
     | 'FULL_REPORT_SYNC';
   timestamp: string;
   payload: any;
@@ -46,8 +46,10 @@ class CloudSyncService {
   private clientId: string = `saathi-${Math.random().toString(36).substring(2, 9)}`;
   private eventListeners: Set<CloudSyncListener> = new Set();
   private statusListeners: Set<SyncStatusListener> = new Set();
-  private reconnectTimer: any = null;
   private brokerIndex: number = 0;
+  private pendingQueue: CloudSyncEvent[] = [];
+  private seenEventIds: Set<string> = new Set();
+  private localBc: BroadcastChannel | null = null;
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -55,7 +57,24 @@ class CloudSyncService {
       if (savedChannel && savedChannel.trim()) {
         this.channelId = savedChannel.trim();
       }
+      this.initLocalBroadcast();
     }
+  }
+
+  private initLocalBroadcast() {
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        if (this.localBc) {
+          try { this.localBc.close(); } catch (_e) {}
+        }
+        this.localBc = new BroadcastChannel(`saathi_sync_${this.channelId}`);
+        this.localBc.onmessage = (msg) => {
+          if (msg && msg.data) {
+            this.handleIncomingEvent(msg.data);
+          }
+        };
+      }
+    } catch (_e) {}
   }
 
   public getChannelId(): string {
@@ -82,11 +101,14 @@ class CloudSyncService {
     this.channelId = clean;
     if (typeof window !== 'undefined') {
       localStorage.setItem('saathi_sync_channel', clean);
+      this.initLocalBroadcast();
     }
 
     if (this.client && this.client.connected) {
       const newTopic = `saathi/incident/${this.channelId}`;
       this.client.subscribe(newTopic, { qos: 1 });
+      // Request state for the new room
+      this.broadcast('phone', 'REQUEST_SYNC', {});
     }
 
     this.notifyStatus(this.status);
@@ -108,6 +130,20 @@ class CloudSyncService {
     this.statusListeners.forEach((l) => l(status, this.channelId));
   }
 
+  private handleIncomingEvent(evt: CloudSyncEvent) {
+    if (!evt || !evt.eventId) return;
+    if (evt.senderId === this.clientId) return; // Discard own echoed messages
+    if (this.seenEventIds.has(evt.eventId)) return; // Discard duplicate receipts
+    this.seenEventIds.add(evt.eventId);
+
+    if (this.seenEventIds.size > 500) {
+      const first = this.seenEventIds.values().next().value;
+      if (first) this.seenEventIds.delete(first);
+    }
+
+    this.eventListeners.forEach((l) => l(evt));
+  }
+
   /**
    * Initialize secure WSS connection to cloud broker
    */
@@ -124,7 +160,7 @@ class CloudSyncService {
         clientId: this.clientId,
         clean: true,
         connectTimeout: 8000,
-        reconnectPeriod: 4000,
+        reconnectPeriod: 3000,
         keepalive: 30
       });
 
@@ -136,6 +172,14 @@ class CloudSyncService {
             console.error('[CloudSync] Subscription error:', err);
           } else {
             console.log(`[CloudSync] Connected & Subscribed to ${topic} via ${brokerUrl}`);
+            // Flush any pending queue messages
+            this.flushPendingQueue();
+            // Solicit initial report state from any active peer
+            setTimeout(() => {
+              if (this.client && this.client.connected) {
+                this.broadcast('phone', 'REQUEST_SYNC', {});
+              }
+            }, 300);
           }
         });
       });
@@ -144,13 +188,7 @@ class CloudSyncService {
         try {
           const raw = message.toString();
           const evt: CloudSyncEvent = JSON.parse(raw);
-
-          // Discard own echoed messages to prevent loops
-          if (evt.senderId === this.clientId) {
-            return;
-          }
-
-          this.eventListeners.forEach((l) => l(evt));
+          this.handleIncomingEvent(evt);
         } catch (e) {
           console.warn('[CloudSync] Malformed incoming message:', e);
         }
@@ -159,7 +197,6 @@ class CloudSyncService {
       this.client.on('error', (err) => {
         console.warn('[CloudSync] Broker connection error:', err.message);
         this.notifyStatus('error');
-        // Try fallback broker on error
         this.brokerIndex++;
       });
 
@@ -178,6 +215,19 @@ class CloudSyncService {
     }
   }
 
+  private flushPendingQueue() {
+    if (!this.client || !this.client.connected) return;
+    const topic = `saathi/incident/${this.channelId}`;
+    while (this.pendingQueue.length > 0) {
+      const evt = this.pendingQueue.shift();
+      if (evt) {
+        try {
+          this.client.publish(topic, JSON.stringify(evt), { qos: 1 });
+        } catch (_e) {}
+      }
+    }
+  }
+
   /**
    * Broadcast an event to all paired devices on this channel
    */
@@ -192,23 +242,36 @@ class CloudSyncService {
       payload
     };
 
+    // 1. Instant 0ms broadcast to any local tabs/windows on same machine
+    if (this.localBc) {
+      try {
+        this.localBc.postMessage(event);
+      } catch (_e) {}
+    }
+
+    // 2. Transmit via MQTT cloud broker
     if (!this.client || !this.client.connected) {
-      // If not yet connected, trigger connect and attempt publish once connected
+      this.pendingQueue.push(event);
       this.connect();
       return;
     }
 
     const topic = `saathi/incident/${this.channelId}`;
-    this.client.publish(topic, JSON.stringify(event), { qos: 1 });
+    try {
+      this.client.publish(topic, JSON.stringify(event), { qos: 1 });
+    } catch (_err) {
+      this.pendingQueue.push(event);
+    }
   }
 
   public disconnect() {
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-    }
     if (this.client) {
       this.client.end(true);
       this.client = null;
+    }
+    if (this.localBc) {
+      try { this.localBc.close(); } catch (_e) {}
+      this.localBc = null;
     }
     this.notifyStatus('disconnected');
   }

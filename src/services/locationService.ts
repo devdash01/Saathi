@@ -150,14 +150,34 @@ export function extractLocationFromSpeech(
     return { locality: sectorMatch[1].trim(), isFound: true, matchedKeyword: sectorMatch[1].trim() };
   }
 
+  const CONVERSATIONAL_WORDS = new Set([
+    'aa raha', 'aa rahi', 'aa rahe', 'aa gaya', 'aa gayi', 'aa gaye',
+    'khada', 'khadi', 'khade', 'baitha', 'baithi', 'baithe',
+    'chup', 'ruk', 'ruka', 'ruko', 'mat aao', 'dar', 'koi', 'kuch',
+    'ek aadmi', 'aadmi', 'log', 'hai', 'hain', 'tha', 'thi', 'the',
+    'hoga', 'hogi', 'hoge', 'maar', 'peet', 'chilla', 'bhaag', 'bol',
+    'dekh', 'phone', 'awaz', 'haath', 'batao', 'madad', 'help', 'bachao',
+    'mere', 'meri', 'mera', 'apne', 'apna', 'apni', 'wo', 'yeh', 'unka', 'uski',
+    'andar', 'bahar', 'dur', 'paas', 'samne', 'piche', 'upar', 'niche'
+  ]);
+
   const landmarkMatch = transcript.match(/(?:near|paas|ke paas|around|opposite|samne)\s+([A-Za-z0-9\s]+?)(?:,|\.|\s+(?:hai|me|par|se|road|metro|chowk|nagar))/i);
   if (landmarkMatch && landmarkMatch[1]?.trim().length > 3) {
-    return { locality: landmarkMatch[1].trim(), isFound: true, matchedKeyword: landmarkMatch[1].trim() };
+    const candidate = landmarkMatch[1].trim().toLowerCase();
+    const isConversational = CONVERSATIONAL_WORDS.has(candidate) ||
+      candidate.split(/\s+/).every((w) => CONVERSATIONAL_WORDS.has(w));
+    if (!isConversational) {
+      return { locality: landmarkMatch[1].trim(), isFound: true, matchedKeyword: landmarkMatch[1].trim() };
+    }
   }
 
   const inPlaceMatch = transcript.match(/(?:in|at|me|par|mein)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i);
   if (inPlaceMatch && inPlaceMatch[1] && inPlaceMatch[1].length > 3) {
-    return { locality: inPlaceMatch[1].trim(), isFound: true, matchedKeyword: inPlaceMatch[1].trim() };
+    const candidate = inPlaceMatch[1].trim().toLowerCase();
+    const isConversational = CONVERSATIONAL_WORDS.has(candidate);
+    if (!isConversational) {
+      return { locality: inPlaceMatch[1].trim(), isFound: true, matchedKeyword: inPlaceMatch[1].trim() };
+    }
   }
 
   // 3. Default: Rohini Sector 16 fallback with explicit cellular telemetry flag

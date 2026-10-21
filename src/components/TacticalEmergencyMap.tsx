@@ -30,6 +30,7 @@ export const TacticalEmergencyMap: React.FC<TacticalMapProps> = ({
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersRef = useRef<L.Marker[]>([]);
   const routeLinesRef = useRef<L.Polyline[]>([]);
+  const lastCenterRef = useRef<[number, number] | null>(null);
 
   const effectiveCallerCoords = callerCoords || DEFAULT_COORDS;
 
@@ -51,10 +52,23 @@ export const TacticalEmergencyMap: React.FC<TacticalMapProps> = ({
       }).addTo(map);
 
       mapInstanceRef.current = map;
+      lastCenterRef.current = effectiveCallerCoords;
     }
 
     const map = mapInstanceRef.current;
-    map.flyTo(effectiveCallerCoords, 15, { animate: true, duration: 0.8 });
+    const [cLat, cLon] = effectiveCallerCoords;
+    const prevCenter = lastCenterRef.current;
+
+    // Only pan/fly if coordinates actually changed by more than 10 meters (prevents thrashing/jumps)
+    if (
+      !prevCenter ||
+      Math.abs(prevCenter[0] - cLat) > 0.0001 ||
+      Math.abs(prevCenter[1] - cLon) > 0.0001
+    ) {
+      lastCenterRef.current = [cLat, cLon];
+      map.flyTo(effectiveCallerCoords, 15, { animate: true, duration: 0.8 });
+    }
+
     const timer = setTimeout(() => {
       if (mapInstanceRef.current) {
         mapInstanceRef.current.invalidateSize();
