@@ -267,40 +267,20 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
 
     const started = speechService.start(
       (result) => {
-        const spoken = cleanDuplicateSpeech(result.transcript);
+        const spoken = (result.transcript || '').trim();
         if (!spoken) return;
         const formatted = isWhisperMode && !spoken.includes('[whisper]') ? `[whisper] ${spoken}` : spoken;
 
-        let accumulated: string;
-        if (baseText) {
-          accumulated = assembleSpeechResults([baseText, formatted]);
-        } else {
-          accumulated = formatted;
-        }
-        accumulated = cleanDuplicateSpeech(accumulated);
+        const accumulated = baseText ? `${baseText} ${formatted}`.trim() : formatted;
 
         setTranscript(accumulated);
         transcriptRef.current = accumulated;
         onUserInputChange(accumulated);
         setSarvamStatus('connected');
 
-        if (spoken.trim()) {
+        if (spoken) {
           const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          let bubbleText = formatted;
-          if (baseText) {
-            const bNorm = baseText.toLowerCase().replace(/[^\w\u0900-\u097F\s]/g, '').trim();
-            const fNorm = formatted.toLowerCase().replace(/[^\w\u0900-\u097F\s]/g, '').trim();
-            if (fNorm.startsWith(bNorm)) {
-              const remainder = formatted.slice(baseText.length).replace(/^[.,!?\s]+/, '').trim();
-              if (remainder) {
-                bubbleText = remainder;
-              }
-            }
-          }
-          const cleanBubble = cleanDuplicateSpeech(bubbleText);
-          if (!cleanBubble) return;
-
-          const newText = `🎤 ${cleanBubble}`;
+          const newText = `🎤 ${formatted}`;
           setMessages((prev) => {
             const existingIdx = prev.findIndex((m: any) => m.id === voiceMsgId);
             if (existingIdx >= 0) {

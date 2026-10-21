@@ -20,6 +20,9 @@ import android.view.KeyEvent;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
+import android.speech.RecognitionListener;
+import android.speech.RecognizerIntent;
+import android.speech.SpeechRecognizer;
 import com.getcapacitor.BridgeActivity;
 import java.util.ArrayList;
 
@@ -32,6 +35,10 @@ public class MainActivity extends BridgeActivity {
     private boolean isPendingMicTrigger = false;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
+    private SpeechRecognizer speechRecognizer = null;
+    private boolean isNativeSpeechListening = false;
+    private String activeSpeechLanguage = "hi-IN";
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         unlockAndTurnScreenOn();
@@ -40,8 +47,8 @@ public class MainActivity extends BridgeActivity {
         // Attach native bridge to WebView once ready
         mainHandler.postDelayed(this::setupNativeBridge, 800);
 
-        // Proactively request SMS runtime permission so background sending works seamlessly
-        checkAndRequestSmsPermission();
+        // Proactively request SMS and Audio recording runtime permissions
+        checkAndRequestPermissions();
 
         handleIntent(getIntent());
     }
@@ -99,16 +106,165 @@ public class MainActivity extends BridgeActivity {
         triggerMicActivation();
     }
 
-    private void checkAndRequestSmsPermission() {
+    private void checkAndRequestPermissions() {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                ArrayList<String> missing = new ArrayList<>();
                 if (checkSelfPermission(android.Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
-                    requestPermissions(new String[]{android.Manifest.permission.SEND_SMS}, 101);
+                    missing.add(android.Manifest.permission.SEND_SMS);
+                }
+                if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                    missing.add(android.Manifest.permission.RECORD_AUDIO);
+                }
+                if (!missing.isEmpty()) {
+                    requestPermissions(missing.toArray(new String[0]), 101);
                 }
             }
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
+
+    private void checkAndRequestSmsPermission() {
+        checkAndRequestPermissions();
+    }
+
+    private void startNativeSpeechRecognizer(String lang) {
+        runOnUiThread(() -> {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                        requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO}, 102);
+                        sendSpeechErrorToWeb("Microphone permission required");
+                        return;
+                    }
+                }
+
+                activeSpeechLanguage = (lang != null && (lang.contains("en") || lang.contains("English"))) ? "en-IN" : "hi-IN";
+
+                if (speechRecognizer != null) {
+                    try { speechRecognizer.destroy(); } catch (Exception ignored) {}
+                    speechRecognizer = null;
+                }
+
+                if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+                    sendSpeechErrorToWeb("Speech recognition not available on this device");
+                    return;
+                }
+
+                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
+                Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+                intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+                intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, activeSpeechLanguage);
+                intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, activeSpeechLanguage);
+                intent.putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, false);
+                intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
+                intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
+
+                speechRecognizer.setRecognitionListener(new RecognitionListener() {
+                    @Override
+                    public void onReadyForSpeech(Bundle params) {}
+
+                    @Override
+                    public void onBeginningOfSpeech() {}
+
+                    @Override
+                    public void onRmsChanged(float rmsdB) {}
+
+                    @Override
+                    public void onBufferReceived(byte[] buffer) {}
+
+                    @Override
+                    public void onEndOfSpeech() {}
+
+                    @Override
+                    public void onError(int error) {
+                        if (isNativeSpeechListening && (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT)) {
+                            mainHandler.postDelayed(() -> {
+                                if (isNativeSpeechListening) {
+                                    startNativeSpeechRecognizer(activeSpeechLanguage);
+                                }
+                            }, 200);
+                            return;
+                        }
+                        sendSpeechErrorToWeb("Speech error: " + error);
+                    }
+
+                    @Override
+                    public void onResults(Bundle results) {
+                        ArrayList<String> matches = results != null ? results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION) : null;
+                        if (matches != null && !matches.isEmpty()) {
+                            sendSpeechResultToWeb(matches.get(0), true);
+                        }
+                        if (isNativeSpeechListening) {
+                            mainHandler.postDelayed(() -> {
+                                if (isNativeSpeechListening) {
+                                    startNativeSpeechRecognizer(activeSpeechLanguage);
+                                }
+                            }, 150);
+                        }
+                    }
+
+                    @Override
+                    public void onPartialResults(Bundle partialResults) {
+                        ArrayList<String> matches = partialResults != null ? partialResults.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION) : null;
+                        if (matches != null && !matches.isEmpty()) {
+                            sendSpeechResultToWeb(matches.get(0), false);
+                        }
+                    }
+
+                    @Override
+                    public void onEvent(int eventType, Bundle params) {}
+                });
+
+                isNativeSpeechListening = true;
+                speechRecognizer.startListening(intent);
+            } catch (Exception e) {
+                e.printStackTrace();
+                sendSpeechErrorToWeb(e.getMessage());
+            }
+        });
+    }
+
+    private void stopNativeSpeechRecognizer() {
+        runOnUiThread(() -> {
+            isNativeSpeechListening = false;
+            if (speechRecognizer != null) {
+                try {
+                    speechRecognizer.stopListening();
+                    speechRecognizer.destroy();
+                } catch (Exception ignored) {}
+                speechRecognizer = null;
+            }
+        });
+    }
+
+    private void sendSpeechResultToWeb(String transcript, boolean isFinal) {
+        runOnUiThread(() -> {
+            try {
+                if (bridge != null && bridge.getWebView() != null) {
+                    String escaped = transcript.replace("\\", "\\\\").replace("'", "\\'").replace("\n", " ");
+                    String js = "window.dispatchEvent(new CustomEvent('saathi:native-speech-result', { detail: { transcript: '" + escaped + "', isFinal: " + isFinal + " } }));";
+                    bridge.getWebView().evaluateJavascript(js, null);
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
+    }
+
+    private void sendSpeechErrorToWeb(String error) {
+        runOnUiThread(() -> {
+            try {
+                if (bridge != null && bridge.getWebView() != null) {
+                    String escaped = (error != null ? error : "Unknown error").replace("'", "\\'");
+                    String js = "window.dispatchEvent(new CustomEvent('saathi:native-speech-error', { detail: { error: '" + escaped + "' } }));";
+                    bridge.getWebView().evaluateJavascript(js, null);
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
     }
 
     private void setupNativeBridge() {
@@ -123,6 +279,31 @@ public class MainActivity extends BridgeActivity {
     }
 
     public class NativeSaathiBridge {
+        @JavascriptInterface
+        public boolean isNativeSpeechAvailable() {
+            return SpeechRecognizer.isRecognitionAvailable(MainActivity.this);
+        }
+
+        @JavascriptInterface
+        public void startSpeechRecognition(String lang) {
+            startNativeSpeechRecognizer(lang);
+        }
+
+        @JavascriptInterface
+        public void stopSpeechRecognition() {
+            stopNativeSpeechRecognizer();
+        }
+
+        @JavascriptInterface
+        public boolean hasAudioPermission() {
+            return checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED;
+        }
+
+        @JavascriptInterface
+        public void requestAudioPermission() {
+            runOnUiThread(MainActivity.this::checkAndRequestPermissions);
+        }
+
         @JavascriptInterface
         public void openAccessibilitySettings() {
             try {
@@ -146,7 +327,7 @@ public class MainActivity extends BridgeActivity {
 
         @JavascriptInterface
         public void requestSmsPermission() {
-            runOnUiThread(MainActivity.this::checkAndRequestSmsPermission);
+            runOnUiThread(MainActivity.this::checkAndRequestPermissions);
         }
 
         @JavascriptInterface
