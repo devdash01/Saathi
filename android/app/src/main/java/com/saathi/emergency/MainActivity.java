@@ -27,6 +27,7 @@ import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
 import android.speech.tts.TextToSpeech;
 import com.getcapacitor.BridgeActivity;
+import org.json.JSONObject;
 import java.util.ArrayList;
 import java.util.Locale;
 
@@ -42,8 +43,8 @@ public class MainActivity extends BridgeActivity {
     private SpeechRecognizer speechRecognizer = null;
     private boolean isNativeSpeechListening = false;
     private String activeSpeechLanguage = "hi-IN";
-    private String accumulatedSentences = "";
     private TextToSpeech nativeTTS = null;
+    private final Runnable restartSpeechRunnable = this::restartNativeSpeechSession;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -145,8 +146,20 @@ public class MainActivity extends BridgeActivity {
         checkAndRequestPermissions();
     }
 
-    private void startNativeSpeechRecognizer(String lang) {
-        startNativeSpeechRecognizer(lang, null);
+    private String first(Bundle b) {
+        if (b == null) return "";
+        ArrayList<String> matches = b.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+        if (matches != null && !matches.isEmpty()) {
+            String s = matches.get(0);
+            return s != null ? s.trim() : "";
+        }
+        return "";
+    }
+
+    private void scheduleRestart(long delayMs) {
+        if (!isNativeSpeechListening) return;
+        mainHandler.removeCallbacks(restartSpeechRunnable);
+        mainHandler.postDelayed(restartSpeechRunnable, delayMs);
     }
 
     private Intent createSpeechIntent() {
@@ -160,25 +173,21 @@ public class MainActivity extends BridgeActivity {
         return intent;
     }
 
-    private void startNativeSpeechRecognizer(String lang, String initialText) {
+    private void startNativeSpeechRecognizer(String lang) {
         runOnUiThread(() -> {
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                     if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
                         requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO}, 102);
-                        sendSpeechErrorToWeb("Microphone permission required");
+                        sendSpeechErrorToWeb(SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS);
                         return;
                     }
                 }
 
                 activeSpeechLanguage = (lang != null && (lang.equals("English") || lang.equals("en-IN"))) ? "en-IN" : "hi-IN";
 
-                if (initialText != null && !initialText.trim().isEmpty()) {
-                    accumulatedSentences = initialText.trim();
-                }
-
                 if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-                    sendSpeechErrorToWeb("Speech recognition not available on this device");
+                    sendSpeechErrorToWeb(SpeechRecognizer.ERROR_CLIENT);
                     return;
                 }
 
@@ -223,46 +232,30 @@ public class MainActivity extends BridgeActivity {
 
                     @Override
                     public void onError(int error) {
-                        if (!isNativeSpeechListening) return;
-
-                        // Auto-revive cleanly on speech pauses or transient errors
-                        mainHandler.postDelayed(() -> {
-                            if (isNativeSpeechListening) {
-                                restartNativeSpeechSession();
-                            }
-                        }, 80);
+                        sendSpeechErrorToWeb(error); // JS commits pending interim
+                        if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
+                            isNativeSpeechListening = false;
+                            return;
+                        }
+                        if (isNativeSpeechListening) {
+                            scheduleRestart(error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY ? 300 : 120);
+                        }
                     }
 
                     @Override
                     public void onResults(Bundle results) {
-                        ArrayList<String> matches = results != null ? results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION) : null;
-                        if (matches != null && !matches.isEmpty()) {
-                            String finalSentence = matches.get(0).trim();
-                            if (!finalSentence.isEmpty()) {
-                                accumulatedSentences = accumulatedSentences.isEmpty() ? finalSentence : (accumulatedSentences + ". " + finalSentence);
-                                sendSpeechResultToWeb(accumulatedSentences, true);
-                            }
-                        }
-
-                        // Recreate recognizer immediately for the next utterance without Error 8 lockup
+                        String t = first(results);
+                        sendSpeechResultToWeb(t, true); // may be "" — JS handles it
                         if (isNativeSpeechListening) {
-                            mainHandler.postDelayed(() -> {
-                                if (isNativeSpeechListening) {
-                                    restartNativeSpeechSession();
-                                }
-                            }, 50);
+                            scheduleRestart(50);
                         }
                     }
 
                     @Override
                     public void onPartialResults(Bundle partialResults) {
-                        ArrayList<String> matches = partialResults != null ? partialResults.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION) : null;
-                        if (matches != null && !matches.isEmpty()) {
-                            String partial = matches.get(0).trim();
-                            if (!partial.isEmpty()) {
-                                String live = accumulatedSentences.isEmpty() ? partial : (accumulatedSentences + ". " + partial);
-                                sendSpeechResultToWeb(live, false);
-                            }
+                        String t = first(partialResults);
+                        if (!t.isEmpty()) {
+                            sendSpeechResultToWeb(t, false);
                         }
                     }
 
@@ -274,6 +267,9 @@ public class MainActivity extends BridgeActivity {
                 speechRecognizer.startListening(intent);
             } catch (Exception e) {
                 e.printStackTrace();
+                if (isNativeSpeechListening) {
+                    scheduleRestart(300);
+                }
             }
         });
     }
@@ -281,6 +277,7 @@ public class MainActivity extends BridgeActivity {
     private void stopNativeSpeechRecognizer() {
         runOnUiThread(() -> {
             isNativeSpeechListening = false;
+            mainHandler.removeCallbacks(restartSpeechRunnable);
             if (speechRecognizer != null) {
                 try {
                     speechRecognizer.stopListening();
@@ -295,8 +292,8 @@ public class MainActivity extends BridgeActivity {
         runOnUiThread(() -> {
             try {
                 if (bridge != null && bridge.getWebView() != null) {
-                    String escaped = transcript.replace("\\", "\\\\").replace("'", "\\'").replace("\n", " ");
-                    String js = "window.dispatchEvent(new CustomEvent('saathi:native-speech-result', { detail: { transcript: '" + escaped + "', isFinal: " + isFinal + " } }));";
+                    String quoted = JSONObject.quote(transcript != null ? transcript : "");
+                    String js = "window.dispatchEvent(new CustomEvent('saathi:native-speech-result', { detail: { transcript: " + quoted + ", isFinal: " + isFinal + " } }));";
                     bridge.getWebView().evaluateJavascript(js, null);
                 }
             } catch (Exception e) {
@@ -305,12 +302,11 @@ public class MainActivity extends BridgeActivity {
         });
     }
 
-    private void sendSpeechErrorToWeb(String error) {
+    private void sendSpeechErrorToWeb(int error) {
         runOnUiThread(() -> {
             try {
                 if (bridge != null && bridge.getWebView() != null) {
-                    String escaped = (error != null ? error : "Unknown error").replace("'", "\\'");
-                    String js = "window.dispatchEvent(new CustomEvent('saathi:native-speech-error', { detail: { error: '" + escaped + "' } }));";
+                    String js = "window.dispatchEvent(new CustomEvent('saathi:native-speech-error', { detail: { error: " + error + " } }));";
                     bridge.getWebView().evaluateJavascript(js, null);
                 }
             } catch (Exception e) {
@@ -352,17 +348,17 @@ public class MainActivity extends BridgeActivity {
 
         @JavascriptInterface
         public void startSpeechRecognition(String lang) {
-            startNativeSpeechRecognizer(lang, null);
+            startNativeSpeechRecognizer(lang);
         }
 
         @JavascriptInterface
         public void startSpeechRecognition(String lang, String initialText) {
-            startNativeSpeechRecognizer(lang, initialText);
+            startNativeSpeechRecognizer(lang);
         }
 
         @JavascriptInterface
         public void resetSpeechAccumulator() {
-            accumulatedSentences = "";
+            // TS Accumulator is the single source of truth
         }
 
         @JavascriptInterface

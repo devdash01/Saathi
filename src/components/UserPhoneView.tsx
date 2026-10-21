@@ -267,27 +267,26 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
         const spoken = (result.transcript || '').trim();
         if (!spoken) return;
         setVoiceError(null);
-        const formatted = isWhisperMode && !spoken.includes('[whisper]') ? `[whisper] ${spoken}` : spoken;
 
-        setTranscript(formatted);
-        transcriptRef.current = formatted;
-        onUserInputChange(formatted);
+        setTranscript(spoken);
+        transcriptRef.current = spoken;
+        onUserInputChange(spoken);
         setSarvamStatus('connected');
 
         if (spoken) {
           const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          const newText = `🎤 ${formatted}`;
+          const displayMsg = isWhisperMode ? `[whisper] 🎤 ${spoken}` : `🎤 ${spoken}`;
           setMessages((prev) => {
             const existingIdx = prev.findIndex((m: any) => m.id === voiceMsgId);
             if (existingIdx >= 0) {
               const currentMsg = prev[existingIdx];
-              if (currentMsg.text === newText) {
+              if (currentMsg.text === displayMsg) {
                 return prev;
               }
               const next = [...prev];
               next[existingIdx] = {
                 ...currentMsg,
-                text: newText,
+                text: displayMsg,
                 time: timeNow,
                 isVoiceLive: true
               } as any;
@@ -298,7 +297,7 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
               {
                 id: voiceMsgId,
                 sender: 'user',
-                text: newText,
+                text: displayMsg,
                 time: timeNow,
                 isVoiceLive: true
               } as any
@@ -320,8 +319,7 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
           );
           currentVoiceMessageIdRef.current = null;
         }
-      },
-      transcriptRef.current || transcript || ''
+      }
     );
 
     if (started) {

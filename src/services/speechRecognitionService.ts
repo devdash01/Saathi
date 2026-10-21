@@ -1,11 +1,13 @@
 /**
  * SAATHI Zero-Lag Real-Time Voice Intelligence Engine
  * 
- * Flawless Dual-Platform Architecture:
- * - Native Android Hardware Speech Engine inside APK (100% microphone reliability on phones).
+ * Flawless Architecture:
+ * - Single Source of Truth: TS Accumulator owns the entire transcript.
+ * - Invariant: displayed text = committed sentences + current interim
+ * - Native Android SpeechRecognizer Bridge streams segment partials & finals.
+ * - On Native Speech error / silence: commits pending interim so words are NEVER lost.
  * - Chromium Web Speech API (webkitSpeechRecognition) on Desktop / Laptop Chrome.
- * - Persistent Sentence Accumulation: Pauses and silence restarts NEVER remove previously spoken text.
- * - Natural Indian Speech Recognition via 'hi-IN' + automatic Devanagari to Roman Hinglish transliteration.
+ * - Transliterates Devanagari to Roman Hinglish + cleans duplicate speech stutters.
  */
 
 import { devanagariToHinglish } from './transliterationService';
@@ -54,6 +56,33 @@ export function cleanDuplicateSpeech(text: string): string {
   return deduped.join(' ');
 }
 
+export class Accumulator {
+  committed = '';
+  interim = '';
+
+  setInterim(t: string) {
+    this.interim = (t || '').trim();
+  }
+
+  commit(t?: string) {
+    const s = ((t !== undefined ? t : this.interim) || '').trim();
+    if (s) {
+      this.committed = this.committed ? `${this.committed}. ${s}` : s;
+    }
+    this.interim = '';
+  }
+
+  get text() {
+    if (!this.interim) return this.committed;
+    return this.committed ? `${this.committed}. ${this.interim}` : this.interim;
+  }
+
+  reset() {
+    this.committed = '';
+    this.interim = '';
+  }
+}
+
 export class UniversalSpeechRecognitionService {
   private recognition: any = null;
   private isListeningState: boolean = false;
@@ -61,13 +90,8 @@ export class UniversalSpeechRecognitionService {
   private onErrorCallback: ((error: string) => void) | null = null;
   private onEndCallback: (() => void) | null = null;
 
-  // Default to hi-IN for accurate Indian speech recognition, transliterated to clean Roman Hinglish
   private currentLanguage: string = 'hi-IN';
-
-  // Base transcript committed from previous pauses or input
-  private baseTranscript: string = '';
-  // Current active utterance from the ongoing recognition session
-  private currentSessionTranscript: string = '';
+  public acc = new Accumulator();
 
   // Android Native Bridge Listeners
   private nativeSpeechResultHandler: ((e: any) => void) | null = null;
@@ -91,44 +115,22 @@ export class UniversalSpeechRecognitionService {
       this.recognition.maxAlternatives = 1;
       this.recognition.lang = this.currentLanguage;
 
-      this.recognition.onresult = (event: any) => {
-        let accumulatedFinal = '';
+      this.recognition.onresult = (e: any) => {
         let interim = '';
-
-        for (let i = 0; i < event.results.length; ++i) {
-          const res = event.results[i];
-          if (!res || !res[0]) continue;
-          const text = (res[0].transcript || '').trim();
-          if (!text) continue;
-
-          if (res.isFinal) {
-            accumulatedFinal += (accumulatedFinal ? ' ' : '') + text;
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          const r = e.results[i];
+          if (!r || !r[0]) continue;
+          const t = devanagariToHinglish(cleanDuplicateSpeech(r[0].transcript || ''));
+          if (r.isFinal) {
+            this.acc.commit(t);
           } else {
-            interim += (interim ? ' ' : '') + text;
+            interim = interim ? `${interim} ${t}` : t;
           }
         }
-
-        const raw = [accumulatedFinal, interim].filter(Boolean).join(' ').trim();
-        if (!raw) return;
-
-        // Clean immediate adjacent stutters
-        const cleaned = cleanDuplicateSpeech(raw);
-        // Transliterate Devanagari to readable Roman Hinglish
-        const formatted = devanagariToHinglish(cleaned);
-
-        this.currentSessionTranscript = formatted;
-
-        // Combine any pre-existing text with the current session text cleanly
-        const fullTranscript = this.baseTranscript
-          ? `${this.baseTranscript}. ${formatted}`.trim()
-          : formatted;
-
-        if (this.onResultCallback) {
-          this.onResultCallback({
-            transcript: fullTranscript,
-            isFinal: Boolean(accumulatedFinal && !interim)
-          });
+        if (interim) {
+          this.acc.setInterim(interim);
         }
+        this.emit(false);
       };
 
       this.recognition.onerror = (event: any) => {
@@ -140,19 +142,11 @@ export class UniversalSpeechRecognitionService {
       };
 
       this.recognition.onend = () => {
-        // When silence causes the recognition session to end:
-        // Commit the session's words into baseTranscript so they are NEVER lost when the user speaks again!
-        if (this.currentSessionTranscript) {
-          this.baseTranscript = this.baseTranscript
-            ? `${this.baseTranscript}. ${this.currentSessionTranscript}`.trim()
-            : this.currentSessionTranscript;
-          this.currentSessionTranscript = '';
-        }
-
+        this.acc.commit(); // keep anything pending
+        this.emit(true);
         if (this.isListeningState) {
           try {
             this.recognition.start();
-            return;
           } catch (_e) {
             setTimeout(() => {
               if (this.isListeningState && this.recognition) {
@@ -161,11 +155,8 @@ export class UniversalSpeechRecognitionService {
                 } catch (_err) {}
               }
             }, 60);
-            return;
           }
-        }
-
-        if (this.onEndCallback) {
+        } else if (this.onEndCallback) {
           this.onEndCallback();
         }
       };
@@ -197,20 +188,24 @@ export class UniversalSpeechRecognitionService {
     }
   }
 
+  private emit(isFinal: boolean) {
+    if (this.onResultCallback) {
+      this.onResultCallback({
+        transcript: this.acc.text,
+        isFinal
+      });
+    }
+  }
+
   public start(
     onResult: SpeechCallback,
     onError?: (error: string) => void,
-    onEnd?: () => void,
-    initialText?: string
+    onEnd?: () => void
   ): boolean {
     this.onResultCallback = onResult;
     this.onErrorCallback = onError || null;
     this.onEndCallback = onEnd || null;
     this.isListeningState = true;
-
-    // Preserve any existing text as the starting base so new speech appends naturally
-    this.baseTranscript = (initialText || '').trim();
-    this.currentSessionTranscript = '';
 
     const win = (typeof window !== 'undefined' ? window : {}) as IWindowWithSpeech;
 
@@ -225,7 +220,7 @@ export class UniversalSpeechRecognitionService {
         if (win.SaathiNative?.requestAudioPermission && !win.SaathiNative.hasAudioPermission?.()) {
           win.SaathiNative.requestAudioPermission();
         }
-        win.SaathiNative!.startSpeechRecognition!(this.currentLanguage, this.baseTranscript);
+        win.SaathiNative!.startSpeechRecognition!(this.currentLanguage);
         return true;
       } catch (err: any) {
         console.warn('Native Android Speech error, falling back to Web Speech:', err);
@@ -259,31 +254,25 @@ export class UniversalSpeechRecognitionService {
     this.cleanupNativeAndroidListeners();
 
     this.nativeSpeechResultHandler = (e: any) => {
-      const data = e.detail;
-      if (!data || !data.transcript || !this.onResultCallback) return;
+      const d = e.detail;
+      if (!d) return;
 
-      const raw = (data.transcript || '').trim();
-      if (!raw) return;
+      const raw = (d.transcript || '').trim();
+      const t = devanagariToHinglish(cleanDuplicateSpeech(raw));
 
-      // Clean immediate duplicates & transliterate Devanagari to Roman Hinglish
-      const cleaned = cleanDuplicateSpeech(raw);
-      const formatted = devanagariToHinglish(cleaned);
-
-      this.baseTranscript = formatted;
-
-      this.onResultCallback({
-        transcript: formatted,
-        isFinal: Boolean(data.isFinal)
-      });
+      if (d.isFinal) {
+        this.acc.commit(t || undefined); // empty final -> commit what we had
+      } else {
+        this.acc.setInterim(t);
+      }
+      this.emit(Boolean(d.isFinal));
     };
 
-    this.nativeSpeechErrorHandler = (e: any) => {
-      console.warn('Native Android Speech error event:', e.detail);
-      if (e.detail?.error && !e.detail.error.includes('timeout') && !e.detail.error.includes('7')) {
-        if (this.onErrorCallback) {
-          this.onErrorCallback(e.detail.error);
-        }
-      }
+    this.nativeSpeechErrorHandler = (_e: any) => {
+      // On silence/pause or recognizer recreation:
+      // Commit pending interim so words never vanish!
+      this.acc.commit();
+      this.emit(true);
     };
 
     window.addEventListener('saathi:native-speech-result', this.nativeSpeechResultHandler);
@@ -303,14 +292,8 @@ export class UniversalSpeechRecognitionService {
 
   public stop(): void {
     this.isListeningState = false;
-
-    // Commit any active speech into base transcript
-    if (this.currentSessionTranscript) {
-      this.baseTranscript = this.baseTranscript
-        ? `${this.baseTranscript}. ${this.currentSessionTranscript}`.trim()
-        : this.currentSessionTranscript;
-      this.currentSessionTranscript = '';
-    }
+    this.acc.commit();
+    this.emit(true);
 
     const win = (typeof window !== 'undefined' ? window : {}) as IWindowWithSpeech;
     if (win.SaathiNative && typeof win.SaathiNative.stopSpeechRecognition === 'function') {
@@ -332,9 +315,7 @@ export class UniversalSpeechRecognitionService {
   }
 
   public reset(): void {
-    this.baseTranscript = '';
-    this.currentSessionTranscript = '';
-
+    this.acc.reset();
     const win = (typeof window !== 'undefined' ? window : {}) as IWindowWithSpeech;
     if (win.SaathiNative && typeof win.SaathiNative.resetSpeechAccumulator === 'function') {
       try {

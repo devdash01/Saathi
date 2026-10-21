@@ -296,7 +296,38 @@ export function App() {
       };
 
       // D. SYNCHRONOUS STATE UPDATE: Triggers immediate re-render of Map, Questions, and Triage
-      setActiveReport(updatedReport);
+      setActiveReport((prev) => ({
+        ...prev,
+        id: prev.id || updatedReport.id,
+        updatedAt: new Date().toISOString(),
+        callerText: text,
+        translatedText: prev.translatedText && prev.callerText === text ? prev.translatedText : text,
+        audioUrl: audioUrl || prev.audioUrl,
+        location: {
+          address: resolvedAddress,
+          coords,
+          accuracyMeters: loc.isFound ? 20 : prev.location?.accuracyMeters || 15,
+          isLiveStreaming: prev.location?.isLiveStreaming,
+          source: loc.isFound ? 'speech_extracted' : (prev.location?.source || 'speech_extracted'),
+          lastUpdated: new Date().toISOString()
+        },
+        triage: analysis.triage,
+        safetyFloor: analysis.safetyFloor,
+        aiConfidence: analysis.aiConfidence,
+        urgencyLevel: analysis.triage.urgencyLevel,
+        questions: dynamicQuestions,
+        agencies: updatedAgencies,
+        auditTrail: [
+          ...prev.auditTrail,
+          {
+            id: `audit-${Date.now()}`,
+            timestamp: new Date().toISOString(),
+            actor: 'citizen',
+            action: 'INPUT_APPENDED',
+            details: `Caller provided additional report details: "${text.substring(0, 50)}..."`
+          }
+        ]
+      }));
       setNearbyServices(instantGeo.nearbyServices);
       setAllReports((prev) => {
         const idx = prev.findIndex((r) => r.id === updatedReport.id);
