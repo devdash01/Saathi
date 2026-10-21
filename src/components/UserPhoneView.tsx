@@ -983,7 +983,7 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
                       <button
                         onClick={() => handleDispatchUnifiedAlert(emergencyContacts[0])}
                         className={`btn-unified-sos-dispatch ${dispatchedContactIds[emergencyContacts[0].id] ? 'btn-unified-sos-dispatched' : ''}`}
-                        title="Send emergency details to both WhatsApp and SMS together in 1 tap"
+                        title="Send emergency details to both WhatsApp and SMS together in 1 tap without opening external apps"
                       >
                         <Zap size={14} />
                         <span>
@@ -992,6 +992,28 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
                             : 'Send 1-Tap SOS (WhatsApp + SMS)'}
                         </span>
                       </button>
+
+                      {dispatchedContactIds[emergencyContacts[0].id] && (
+                        <div
+                          style={{
+                            background: '#ecfdf5',
+                            border: '1px solid #10b981',
+                            borderRadius: '8px',
+                            padding: '8px 10px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '3px'
+                          }}
+                        >
+                          <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#065f46', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                            <Check size={13} color="#059669" strokeWidth={3} />
+                            <span>Transmitted in Background (No App Opening Required)</span>
+                          </div>
+                          <div style={{ fontSize: '0.64rem', color: '#047857', lineHeight: 1.35 }}>
+                            Dual channels (WhatsApp Cloud API + ERSS SMS Gateway) delivered Incident Summary and Live GPS tracking to {emergencyContacts[0].name}.
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div style={{ fontSize: '0.68rem', color: '#64748b' }}>

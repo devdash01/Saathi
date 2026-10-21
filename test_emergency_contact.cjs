@@ -17,28 +17,45 @@ function cleanPhoneForSms(raw) {
   return cleaned;
 }
 
+function generateIncidentSummary(report) {
+  const callerStatement = report.callerText?.trim();
+  const location = report.location?.address || 'Paschim Vihar, New Delhi';
+  const urgency = report.urgencyLevel || 'CRITICAL';
+  if (callerStatement) {
+    return `Distress caller reported: "${callerStatement}". Active emergency response initiated at ${location} under ${urgency} priority.`;
+  }
+  return `Immediate safety assistance requested via SAATHI 181/112 command.`;
+}
+
 function buildEmergencyAlertMessage(report, contactName) {
   const incidentId = report.id || 'INC-181';
   const urgency = report.urgencyLevel || 'CRITICAL';
-  const situation = report.callerText?.trim() || 'Urgent assistance requested';
+  const incidentSummary = generateIncidentSummary(report);
   const address = report.location?.address || 'Paschim Vihar, New Delhi';
   const coords = report.location?.coords || [28.6692, 77.1068];
   const mapsLink = `https://maps.google.com/?q=${coords[0].toFixed(5)},${coords[1].toFixed(5)}`;
   const policeStatus = report.agencies?.police?.recommended
-    ? `Requested (${report.agencies.police.priority || 'HIGH'} - ETA ~${report.agencies.police.eta || '4m'})`
-    : 'Standby';
+    ? `Dispatched (Priority: ${report.agencies.police.priority || 'IMMEDIATE'}, ETA ~${report.agencies.police.eta || '4 mins'})`
+    : 'Control Room Standby';
 
   return (
-    `🚨 SAATHI EMERGENCY SOS ALERT 🚨\n\n` +
-    `Dear ${contactName},\nI have triggered an emergency distress alert via SAATHI 181 (Delhi Emergency Response System).\n\n` +
-    `📋 INCIDENT ID: ${incidentId}\n` +
-    `⚡ URGENCY LEVEL: ${urgency}\n` +
-    `🗣️ SITUATION REPORTED: "${situation}"\n\n` +
-    `📍 LIVE LOCATION:\n${address}\n` +
-    `🗺️ GOOGLE MAPS LINK:\n${mapsLink}\n\n` +
-    `🚔 DISPATCH STATUS:\n• Police 112: ${policeStatus}\n\n` +
-    `🛡️ ERSS OPERATOR: Ananya Sharma (DL-CAD-1187)\n\n` +
-    `⚠️ NOTE: If I am unable to answer phone calls safely, please track my location and coordinate directly with 112 ERSS quoting Incident #${incidentId}.`
+    `SAATHI EMERGENCY DISTRESS ALERT\n\n` +
+    `Dear ${contactName},\n` +
+    `You are receiving this emergency notification because you are registered as a trusted emergency guardian. Your contact is currently connected to the Delhi 181 / 112 ERSS Women Safety & Emergency Command.\n\n` +
+    `[INCIDENT SUMMARY]\n` +
+    `${incidentSummary}\n` +
+    `Incident ID: ${incidentId} • Priority: ${urgency}\n\n` +
+    `[LIVE LOCATION & REAL-TIME TRACKING]\n` +
+    `Location: ${address}\n` +
+    `Live Google Maps Link:\n` +
+    `${mapsLink}\n\n` +
+    `[EMERGENCY DISPATCH STATUS]\n` +
+    `- Delhi Police 112: ${policeStatus}\n\n` +
+    `[WHAT YOU CAN DO]\n` +
+    `1. Stay calm. Official responders have already received this docket.\n` +
+    `2. Reach out via phone or text if it is safe for them to speak.\n` +
+    `3. If they cannot be reached, coordinate directly with Delhi Police ERSS by dialing 112 quoting Case #${incidentId}.\n\n` +
+    `Delhi ERSS Central Command Station (OP-1187)`
   );
 }
 
@@ -81,11 +98,12 @@ const mockReport = {
 const alertMsg = buildEmergencyAlertMessage(mockReport, 'Rahul Sharma');
 assert(alertMsg.includes('SA-2024-1187'), 'Message must contain incident ID');
 assert(alertMsg.includes('CRITICAL'), 'Message must contain urgency level');
+assert(alertMsg.includes('[INCIDENT SUMMARY]'), 'Message must contain [INCIDENT SUMMARY]');
+assert(alertMsg.includes('Distress caller reported:'), 'Message must contain dynamic incident explanation');
 assert(alertMsg.includes('A-Block Paschim Vihar'), 'Message must contain address');
 assert(alertMsg.includes('https://maps.google.com/?q=28.66920,77.10680'), 'Message must contain clickable Google Maps link');
-assert(alertMsg.includes('Police 112: Requested (IMMEDIATE - ETA ~4m)'), 'Message must contain police dispatch ETA');
-assert(alertMsg.includes('Ananya Sharma (DL-CAD-1187)'), 'Message must contain ERSS Operator credentials');
-console.log('✓ PASS: Emergency message formats all operator CAD details into structured SOS');
+assert(alertMsg.includes('Delhi Police 112: Dispatched'), 'Message must contain police dispatch');
+console.log('✓ PASS: Emergency message formats all operator CAD details into soulful structured SOS with incident summary');
 
 // 3. WhatsApp and SMS URL generation
 const waUrl = generateWhatsAppUrl(rawIndianPhone, alertMsg);

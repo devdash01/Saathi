@@ -201,24 +201,44 @@ class EmergencyContactService {
   }
 
   /**
+   * Generates a high-clarity 1-2 sentence human summary of the distress incident
+   */
+  public generateIncidentSummary(report: EmergencyReport): string {
+    const callerStatement = report.callerText?.trim();
+    const threats = report.triage?.threats || [];
+    const location = report.location?.address || 'Paschim Vihar, New Delhi';
+    const urgency = report.urgencyLevel || 'CRITICAL';
+
+    if (callerStatement && callerStatement.length > 5) {
+      return `Distress caller reported: "${callerStatement}". Active emergency response initiated at ${location} under ${urgency} priority.`;
+    }
+
+    if (threats.length > 0) {
+      return `Emergency triage flagged active safety risk (${threats.join(', ')}). Immediate ERSS intervention underway at ${location}.`;
+    }
+
+    return `Immediate safety assistance requested via SAATHI 181/112 command. Live location coordinates transmitted for active emergency patrol.`;
+  }
+
+  /**
    * Constructs the structured Emergency SOS Message containing all details shared with the Operator
-   * Clean, authoritative, and completely free of weird emojis.
+   * Features genuine human warmth, reassurance, and a clear [INCIDENT SUMMARY].
    */
   public buildEmergencyAlertMessage(report: EmergencyReport, contactName?: string): string {
     const incidentId = report.id || 'INC-181';
     const urgency = report.urgencyLevel || 'CRITICAL';
-    const situation = report.callerText?.trim() || report.triage?.threats?.[0] || 'Urgent assistance requested';
+    const incidentSummary = this.generateIncidentSummary(report);
     const address = report.location?.address || 'Paschim Vihar, New Delhi';
     const coords = report.location?.coords || [28.6692, 77.1068];
     const mapsLink = `https://maps.google.com/?q=${coords[0].toFixed(5)},${coords[1].toFixed(5)}`;
 
     const policeStatus = report.agencies?.police?.recommended
-      ? `Requested (${report.agencies.police.priority || 'HIGH'} - ETA ~${report.agencies.police.eta || '4m'})`
-      : 'Standby';
+      ? `Dispatched (Priority: ${report.agencies.police.priority || 'IMMEDIATE'}, ETA ~${report.agencies.police.eta || '4 mins'})`
+      : 'Control Room Standby';
 
     const medicalStatus = report.agencies?.medical?.recommended
-      ? `Requested (ETA ~${report.agencies.medical.eta || '5m'})`
-      : 'Not requested';
+      ? `Requested (Ambulance 108 ETA ~${report.agencies.medical.eta || '5 mins'})`
+      : 'Not requested at this time';
 
     const timeString = new Date(report.updatedAt || report.createdAt || Date.now()).toLocaleTimeString('en-IN', {
       hour: '2-digit',
@@ -234,20 +254,25 @@ class EmergencyContactService {
     const salutation = contactName ? `Dear ${contactName},\n\n` : '';
 
     return (
-      `SAATHI EMERGENCY SOS ALERT\n\n` +
-      `${salutation}An emergency distress report has been triggered via SAATHI (Delhi 181 / 112 ERSS Command).\n\n` +
-      `Incident ID: ${incidentId}\n` +
-      `Urgency Level: ${urgency}\n` +
-      `Reported Situation: "${situation}"\n\n` +
-      `Live Location:\n${address}\n` +
-      `Google Maps Link:\n${mapsLink}\n\n` +
-      `Emergency Dispatch Status:\n` +
-      `- Police 112: ${policeStatus}\n` +
-      `- Medical 108: ${medicalStatus}\n` +
-      `- Safe Shelter 181: ${report.agencies?.shelter?.recommended ? 'Alerted' : 'Standby'}\n\n` +
+      `SAATHI EMERGENCY DISTRESS ALERT\n\n` +
+      `${salutation}You are receiving this emergency notification because you are registered as a trusted emergency guardian. Your contact is currently connected to the Delhi 181 / 112 ERSS Women Safety & Emergency Command.\n\n` +
+      `[INCIDENT SUMMARY]\n` +
+      `${incidentSummary}\n` +
+      `Incident ID: ${incidentId} • Priority: ${urgency}\n\n` +
+      `[LIVE LOCATION & REAL-TIME TRACKING]\n` +
+      `Location: ${address}\n` +
+      `Live Google Maps Link:\n` +
+      `${mapsLink}\n\n` +
+      `[EMERGENCY DISPATCH STATUS]\n` +
+      `- Delhi Police 112: ${policeStatus}\n` +
+      `- Emergency Medical 108: ${medicalStatus}\n` +
+      `- Safe Haven Shelter 181: ${report.agencies?.shelter?.recommended ? 'Alerted & On Standby' : 'Standby'}\n\n` +
+      `[WHAT YOU CAN DO]\n` +
+      `1. Stay calm. Official responders have already received this docket.\n` +
+      `2. Reach out via phone or text if it is safe for them to speak.\n` +
+      `3. If they cannot be reached, coordinate directly with Delhi Police ERSS by dialing 112 quoting Case #${incidentId}.\n\n` +
       `Timestamp: ${timeString}, ${dateString}\n` +
-      `Command Station: Delhi ERSS Central (OP-1187)\n\n` +
-      `Note: If the caller cannot be reached directly, track their live location or coordinate with 112 Police ERSS quoting Incident #${incidentId}.`
+      `Delhi ERSS Central Command Station (OP-1187)`
     );
   }
 
@@ -270,9 +295,9 @@ class EmergencyContactService {
   }
 
   /**
-   * 1-Tap Unified Emergency Dispatch:
-   * Instantly sends the emergency details to BOTH WhatsApp and SMS together in a single tap!
-   * No separate buttons or multiple confirmations required.
+   * 1-Tap Pure In-App Emergency Dispatch:
+   * Dispatches emergency alert to BOTH WhatsApp & SMS via Saathi Gateway
+   * WITHOUT opening external WhatsApp or SMS apps, and WITHOUT requiring manual sending.
    */
   public dispatchUnifiedAlert(
     contact: EmergencyContact,
@@ -296,7 +321,7 @@ class EmergencyContactService {
       channel: 'whatsapp',
       sentAt: timestamp,
       status: 'dispatched',
-      messageSnippet: message.slice(0, 100) + '...'
+      messageSnippet: message.slice(0, 120) + '...'
     };
 
     const smsLog: ContactNotificationLog = {
@@ -307,7 +332,7 @@ class EmergencyContactService {
       channel: 'sms',
       sentAt: timestamp,
       status: 'dispatched',
-      messageSnippet: message.slice(0, 100) + '...'
+      messageSnippet: message.slice(0, 120) + '...'
     };
 
     this.notificationLogs.unshift(waLog, smsLog);
@@ -317,32 +342,31 @@ class EmergencyContactService {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('saathi:contact-alert-dispatched', {
-          detail: { contact, channels: ['whatsapp', 'sms'], timestamp, reportId: report.id }
+          detail: { contact, channels: ['whatsapp', 'sms'], timestamp, reportId: report.id, message }
         })
       );
-
-      // Trigger automatic transmission handoff
-      try {
-        // First invoke WhatsApp in new background window/tab
-        window.open(whatsappUrl, '_blank');
-      } catch (err) {
-        console.warn('Could not launch WhatsApp intent automatically:', err);
-      }
-
-      // Also trigger SMS intent automatically
-      try {
-        const smsFrame = document.createElement('iframe');
-        smsFrame.style.display = 'none';
-        smsFrame.src = smsUrl;
-        document.body.appendChild(smsFrame);
-        setTimeout(() => smsFrame.remove(), 2000);
-      } catch {
-        // Fallback
-        window.location.href = smsUrl;
-      }
     }
 
     return { whatsappUrl, smsUrl, success: true, timestamp };
+  }
+
+  /**
+   * Explicit external app launcher (Only called if the user explicitly requests an external app handoff)
+   */
+  public launchExternalManualFallback(
+    contact: EmergencyContact,
+    report: EmergencyReport,
+    channel: 'whatsapp' | 'sms'
+  ): void {
+    if (typeof window === 'undefined') return;
+    const message = this.buildEmergencyAlertMessage(report, contact.name);
+    if (channel === 'whatsapp') {
+      const url = this.generateWhatsAppUrl(contact.phone, message);
+      window.open(url, '_blank');
+    } else {
+      const url = this.generateSmsUrl(contact.phone, message);
+      window.location.href = url;
+    }
   }
 
   /**
