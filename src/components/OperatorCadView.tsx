@@ -16,6 +16,7 @@ import type {
   AgencyDispatchState,
   SafeSignalQuestion,
   UrgencyLevel,
+  EvidenceItem,
   EmergencyContact
 } from '../types';
 import type { EmergencyServiceEntity } from '../services/locationService';
@@ -78,10 +79,10 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
   aiConfidence: _aiConfidence,
   onUpdateLocation: _onUpdateLocation
 }) => {
-  // Navigation Tabs matching reference images: Console | Incidents | Wallboard | Stress Lab
+  // Navigation Tabs: Console | Incidents | Wallboard | Stress Lab
   const [activeTab, setActiveTab] = useState<OperatorCadTab>('console');
 
-  // Real-time ticking clock string (e.g. 09:41:35)
+  // Real-time ticking clock (e.g. 09:41:35)
   const [currentTimeStr, setCurrentTimeStr] = useState(() => {
     const d = new Date();
     return d.toTimeString().split(' ')[0];
@@ -94,9 +95,18 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
     return () => clearInterval(timer);
   }, []);
 
+  // Determine if citizen has provided any live input
+  const rawCallerText = (inputText || activeReport?.callerText || '').trim();
+  const hasInput = Boolean(
+    rawCallerText.length > 0 ||
+    (triage?.threats && triage.threats.length > 0) ||
+    (triage?.evidenceLinks && triage.evidenceLinks.length > 0) ||
+    (activeReport && activeReport.urgencyLevel && activeReport.urgencyLevel !== 'LOW')
+  );
+
   // Queue filter on Console
   const [queueFilter, setQueueFilter] = useState<'all' | 'p1p2' | 'coded'>('all');
-  const [selectedCallId, setSelectedCallId] = useState<string>('INC-4A21');
+  const [selectedCallId, setSelectedCallId] = useState<string>(activeReport?.id || 'INC-1187');
 
   // Manual note input in Live Transcript
   const [manualNote, setManualNote] = useState('');
@@ -136,29 +146,29 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
     return unsub;
   }, []);
 
-  // Live Call Duration Timer & State (179s = 02:59 initially matching screenshot)
-  const [callDuration, setCallDuration] = useState(179);
+  // Live Call Duration Timer & State (starts at 00:00 when clean)
+  const [callDuration, setCallDuration] = useState(0);
   const [isCallEnded, setIsCallEnded] = useState(false);
   const [isEscalatedToP1, setIsEscalatedToP1] = useState(false);
 
-  // Restart duration when a new chat / report session is initiated by the user
-  const prevReportIdRef = useRef<string | undefined>(activeReport?.id);
+  // Restart duration when a new distress input session is received
+  const prevCallerTextRef = useRef<string>('');
   useEffect(() => {
-    if (activeReport?.id && prevReportIdRef.current && activeReport.id !== prevReportIdRef.current) {
-      setCallDuration(0);
+    if (rawCallerText && !prevCallerTextRef.current) {
+      setCallDuration(1);
       setIsCallEnded(false);
       setIsEscalatedToP1(false);
     }
-    prevReportIdRef.current = activeReport?.id;
-  }, [activeReport?.id]);
+    prevCallerTextRef.current = rawCallerText;
+  }, [rawCallerText]);
 
   useEffect(() => {
-    if (isCallEnded) return;
+    if (isCallEnded || !hasInput) return;
     const interval = setInterval(() => {
       setCallDuration((prev) => prev + 1);
     }, 1000);
     return () => clearInterval(interval);
-  }, [isCallEnded]);
+  }, [isCallEnded, hasInput]);
 
   const formatDuration = (secs: number) => {
     const m = Math.floor(secs / 60).toString().padStart(2, '0');
@@ -184,8 +194,8 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
   });
   const [_stressSimRunCount, _setStressSimRunCount] = useState(1);
 
-  // Incidents Tab selected incident (Page 8)
-  const [selectedIncidentId, setSelectedIncidentId] = useState('INC-4A1C');
+  // Incidents Tab selected incident
+  const [selectedIncidentId, setSelectedIncidentId] = useState(activeReport?.id || 'INC-1187');
   const [incidentFilter, setIncidentFilter] = useState<'open' | 'closed' | 'linked'>('open');
   const [incidentSearchQuery, setIncidentSearchQuery] = useState('');
   const [eventLogFilter, setEventLogFilter] = useState<'all' | 'caller' | 'operator' | 'system' | 'units'>('all');
@@ -210,12 +220,31 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
     onDispatchAgency('police');
   };
 
-  const effectiveUrgency = isEscalatedToP1 ? 'CRITICAL' : triage.urgencyLevel;
+  const effectiveUrgency: UrgencyLevel = isEscalatedToP1
+    ? 'CRITICAL'
+    : (triage?.urgencyLevel || 'LOW');
+
+  // Evidence detectors based on caller speech
+  const weaponEv = (triage?.evidenceLinks || []).find((e: EvidenceItem) =>
+    e.category === 'threat' &&
+    (e.quoteHinglish.toLowerCase().includes('chaku') ||
+     e.quoteHinglish.toLowerCase().includes('hathiyar') ||
+     e.quoteHinglish.toLowerCase().includes('weapon') ||
+     e.quoteHinglish.toLowerCase().includes('knife') ||
+     e.quoteHinglish.toLowerCase().includes('bandook') ||
+     e.quoteHinglish.toLowerCase().includes('gun'))
+  );
+
+  const injuryEv = (triage?.evidenceLinks || []).find((e: EvidenceItem) => e.category === 'injury');
+
+  const reportCode = activeReport?.id
+    ? (activeReport.id.startsWith('SA-') ? `INC-${activeReport.id.slice(-4)}` : activeReport.id)
+    : 'INC-1187';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', background: '#eaedf2', color: '#0f172a', fontFamily: 'Inter, system-ui, sans-serif' }}>
       {/* ======================================================== */}
-      {/* 1. TOP CAD NAVIGATION BAR (MATCHING SCREENSHOTS)          */}
+      {/* 1. TOP CAD NAVIGATION BAR (WHITE GOVTECH THEME)           */}
       {/* ======================================================== */}
       <header className="cad-top-header-181">
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px', height: '100%' }}>
@@ -272,8 +301,8 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
 
           {activeTab === 'incidents' && (
             <>
-              <span>Queue <strong style={{ color: '#0f172a' }}>5</strong></span>
-              <span>Longest wait <strong style={{ color: '#dc2626' }}>08:26</strong></span>
+              <span>Queue <strong style={{ color: '#0f172a' }}>{hasInput ? 1 : 0}</strong></span>
+              <span>Longest wait <strong style={{ color: hasInput ? '#dc2626' : '#64748b' }}>{hasInput ? formatDuration(callDuration) : '00:00'}</strong></span>
               <span>OP-07</span>
               <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#0f172a', fontSize: '0.82rem' }}>
                 {currentTimeStr}
@@ -283,8 +312,8 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
 
           {(activeTab === 'console' || activeTab === 'stresslab') && (
             <>
-              <span>Queue <strong style={{ color: '#0f172a' }}>5</strong></span>
-              <span>Longest wait <strong style={{ color: '#dc2626' }}>08:26</strong></span>
+              <span>Queue <strong style={{ color: '#0f172a' }}>{hasInput ? 1 : 0}</strong></span>
+              <span>Longest wait <strong style={{ color: hasInput ? '#dc2626' : '#64748b' }}>{hasInput ? formatDuration(callDuration) : '00:00'}</strong></span>
               <span style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#16a34a', fontWeight: 700 }}>
                 <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#16a34a', display: 'inline-block' }} />
                 <span>ASR online</span>
@@ -299,35 +328,57 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
       </header>
 
       {/* ======================================================== */}
-      {/* 2. TAB: CONSOLE VIEW (IMAGE 3)                           */}
+      {/* 2. TAB: CONSOLE VIEW (IMAGE 3 - FULLY DYNAMIC)           */}
       {/* ======================================================== */}
       {activeTab === 'console' && (
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
-          {/* Active Call Orange Banner (Matching Image 3) */}
+          {/* Active Call Banner */}
           <div className="active-call-top-banner">
             <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-              {/* Square Priority Block: P2 HIGH or P1 CRITICAL */}
-              {effectiveUrgency === 'CRITICAL' ? (
+              {/* Urgency Square Badge */}
+              {!hasInput ? (
+                <div className="urgency-square-p4" style={{ background: '#64748b' }}>
+                  <div className="urgency-square-num" style={{ fontSize: '1.05rem' }}>IDLE</div>
+                  <div className="urgency-square-text">STANDBY</div>
+                </div>
+              ) : effectiveUrgency === 'CRITICAL' ? (
                 <div className="urgency-square-p1">
                   <div className="urgency-square-num">P1</div>
                   <div className="urgency-square-text">CRITICAL</div>
                 </div>
-              ) : (
+              ) : effectiveUrgency === 'SEVERE' ? (
                 <div className="urgency-square-p2">
                   <div className="urgency-square-num">P2</div>
                   <div className="urgency-square-text">HIGH</div>
+                </div>
+              ) : effectiveUrgency === 'MODERATE' ? (
+                <div className="urgency-square-p3">
+                  <div className="urgency-square-num">P3</div>
+                  <div className="urgency-square-text">MEDIUM</div>
+                </div>
+              ) : (
+                <div className="urgency-square-p4">
+                  <div className="urgency-square-num">P4</div>
+                  <div className="urgency-square-text">ROUTINE</div>
                 </div>
               )}
 
               <div>
                 <div style={{ fontSize: '1.02rem', fontWeight: 800, color: '#0f172a' }}>
-                  {activeReport?.id ? (activeReport.id.startsWith('SA-') ? `INC-${activeReport.id.slice(-4)}` : activeReport.id) : 'INC-4A21'}{' '}
-                  Domestic violence — coded call, abuser on premises
+                  {!hasInput ? (
+                    `${reportCode} · Inbound Channel Active — Awaiting Caller Transmission`
+                  ) : (
+                    `${reportCode} ${triage?.threats?.length ? triage.threats.join(' · ') : 'Distress Alert'} — Inbound Triage`
+                  )}
                 </div>
                 <div style={{ fontSize: '0.72rem', color: '#475569', marginTop: '2px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                   <span>Caller 98XXX-X2666 · Airtel 4G · Hinglish</span>
-                  <span>Area Paschim Vihar A-4 · ±600 m · unconfirmed</span>
-                  <span style={{ color: '#ea580c', fontWeight: 700 }}>Floor P2 locked · 09:38:59</span>
+                  <span>
+                    Area: <strong style={{ color: isLocationConfirmed ? '#16a34a' : '#ea580c' }}>{extractedLocation || 'Paschim Vihar GPS Locked'}</strong>
+                  </span>
+                  {hasInput && (
+                    <span style={{ color: '#ea580c', fontWeight: 700 }}>Floor {effectiveUrgency} locked</span>
+                  )}
                 </div>
               </div>
             </div>
@@ -335,8 +386,18 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
             {/* Right Action Buttons */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#dc2626', animation: 'ping 1.5s infinite' }} />
-                <span style={{ fontSize: '0.74rem', fontWeight: 800, color: '#0f172a' }}>LIVE</span>
+                <span
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    background: hasInput ? '#dc2626' : '#16a34a',
+                    animation: hasInput ? 'ping 1.5s infinite' : 'none'
+                  }}
+                />
+                <span style={{ fontSize: '0.74rem', fontWeight: 800, color: '#0f172a' }}>
+                  {hasInput ? 'LIVE' : 'READY'}
+                </span>
                 <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '0.94rem', color: '#0f172a' }}>
                   {formatDuration(callDuration)}
                 </span>
@@ -359,6 +420,7 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
               </button>
 
               <button
+                disabled={!hasInput}
                 style={{
                   background: '#ffffff',
                   border: '1px solid #cbd5e1',
@@ -366,8 +428,8 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
                   padding: '6px 12px',
                   fontSize: '0.74rem',
                   fontWeight: 700,
-                  color: '#0f172a',
-                  cursor: 'pointer'
+                  color: hasInput ? '#0f172a' : '#94a3b8',
+                  cursor: hasInput ? 'pointer' : 'not-allowed'
                 }}
               >
                 Transfer
@@ -375,6 +437,7 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
 
               <button
                 onClick={handleEscalateToP1}
+                disabled={effectiveUrgency === 'CRITICAL'}
                 style={{
                   background: '#ffffff',
                   border: '1px solid #f87171',
@@ -383,7 +446,8 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
                   padding: '6px 12px',
                   fontSize: '0.74rem',
                   fontWeight: 800,
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  opacity: effectiveUrgency === 'CRITICAL' ? 0.6 : 1
                 }}
               >
                 Escalate to P1
@@ -392,15 +456,16 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
               {!isCallEnded ? (
                 <button
                   onClick={() => setIsCallEnded(true)}
+                  disabled={!hasInput}
                   style={{
-                    background: '#dc2626',
+                    background: hasInput ? '#dc2626' : '#94a3b8',
                     border: 'none',
                     color: '#ffffff',
                     borderRadius: '4px',
                     padding: '6px 14px',
                     fontSize: '0.74rem',
                     fontWeight: 800,
-                    cursor: 'pointer'
+                    cursor: hasInput ? 'pointer' : 'default'
                   }}
                 >
                   End call
@@ -457,12 +522,12 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
             </div>
           </div>
 
-          {/* Situation Strip (6 Tiles Matching Image 3) */}
+          {/* Situation Strip (Dynamically Populated from Real Caller Input) */}
           <div className="cad-situation-strip">
             <div className="cad-situation-tile">
               <span className="sit-lbl">SITUATION</span>
-              <span className="sit-val" style={{ color: '#2563eb' }}>
-                Danger now <strong style={{ color: '#1d4ed8' }}>Asking</strong>
+              <span className="sit-val" style={{ color: hasInput ? '#2563eb' : '#64748b' }}>
+                Danger now <strong style={{ color: hasInput ? '#1d4ed8' : '#64748b' }}>{hasInput ? (triage?.threats[0] || 'Active') : 'Standby'}</strong>
               </span>
             </div>
             <div className="cad-situation-tile">
@@ -473,36 +538,36 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
             </div>
             <div className="cad-situation-tile">
               <span className="sit-lbl">Weapon</span>
-              <span className="sit-val" style={{ color: (triage.threats || []).some(t => t.toLowerCase().includes('weapon') || t.toLowerCase().includes('knife')) ? '#dc2626' : '#64748b' }}>
-                {(triage.threats || []).some(t => t.toLowerCase().includes('weapon') || t.toLowerCase().includes('knife')) ? 'Knife · reported' : 'Unknown'}
+              <span className="sit-val" style={{ color: weaponEv ? '#dc2626' : '#64748b', fontWeight: weaponEv ? 800 : 600 }}>
+                {weaponEv ? `${weaponEv.quoteHinglish} · detected` : 'None detected'}
               </span>
             </div>
             <div className="cad-situation-tile">
               <span className="sit-lbl">Injury</span>
-              <span className="sit-val" style={{ color: '#64748b' }}>
-                Unknown
+              <span className="sit-val" style={{ color: injuryEv ? '#dc2626' : '#64748b', fontWeight: injuryEv ? 800 : 600 }}>
+                {injuryEv ? injuryEv.label : 'None reported'}
               </span>
             </div>
             <div className="cad-situation-tile">
               <span className="sit-lbl">Children</span>
-              <span className="sit-val" style={{ color: triage.childrenAtRisk?.detected ? '#ea580c' : '#64748b' }}>
-                {triage.childrenAtRisk?.detected ? 'Present · 2 children' : 'Unknown'}
+              <span className="sit-val" style={{ color: triage?.childrenAtRisk?.detected ? '#ea580c' : '#64748b', fontWeight: triage?.childrenAtRisk?.detected ? 800 : 600 }}>
+                {triage?.childrenAtRisk?.detected ? 'Present · at risk' : 'Unconfirmed'}
               </span>
             </div>
             <div className="cad-situation-tile">
               <span className="sit-lbl">Can speak freely</span>
-              <span className="sit-val" style={{ color: !triage.callerConstraints?.canSpeakFreely ? '#0f172a' : '#16a34a' }}>
-                {!triage.callerConstraints?.canSpeakFreely ? 'No · confirmed' : 'Yes · open'}
+              <span className="sit-val" style={{ color: hasInput && !triage?.callerConstraints?.canSpeakFreely ? '#dc2626' : '#16a34a', fontWeight: 800 }}>
+                {!hasInput ? 'Awaiting input' : !triage?.callerConstraints?.canSpeakFreely ? 'No · coded / whisper' : 'Yes · open'}
               </span>
             </div>
           </div>
 
           {/* 3-Column Body Layout */}
           <div className="cad-console-page-layout">
-            {/* COLUMN 1: QUEUE · 7 */}
+            {/* COLUMN 1: QUEUE */}
             <aside className="cad-queue-column">
               <div style={{ padding: '8px 10px 4px', fontSize: '0.74rem', fontWeight: 800, color: '#0f172a', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span>QUEUE · 7</span>
+                <span>QUEUE · {hasInput ? '1' : '0'}</span>
                 <div style={{ display: 'flex', gap: '3px' }}>
                   <button
                     onClick={() => setQueueFilter('all')}
@@ -554,144 +619,76 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
 
               {/* Calls List */}
               <div className="queue-items-scroll">
-                {/* Ringing Call Card */}
-                <div className="queue-card-181" style={{ borderLeft: '3px solid #dc2626' }}>
+                {/* Active Inbound Call */}
+                <div
+                  className={`queue-card-181 ${selectedCallId === reportCode ? 'active' : ''}`}
+                  onClick={() => setSelectedCallId(reportCode)}
+                >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#dc2626', animation: 'ping 1s infinite' }} />
-                      <span style={{ color: '#dc2626', fontSize: '0.68rem', fontWeight: 800 }}>RINGING · INC-4A22</span>
-                    </div>
-                    <button
+                    <span
                       style={{
-                        background: '#0f172a',
-                        border: 'none',
+                        background: !hasInput
+                          ? '#64748b'
+                          : effectiveUrgency === 'CRITICAL'
+                          ? '#dc2626'
+                          : effectiveUrgency === 'SEVERE'
+                          ? '#ea580c'
+                          : effectiveUrgency === 'MODERATE'
+                          ? '#d97706'
+                          : '#16a34a',
                         color: 'white',
-                        padding: '3px 8px',
-                        borderRadius: '3px',
                         fontSize: '0.62rem',
                         fontWeight: 800,
-                        cursor: 'pointer'
+                        padding: '1px 5px',
+                        borderRadius: '2px'
                       }}
                     >
-                      Answer
-                    </button>
-                  </div>
-                  <div style={{ fontSize: '0.62rem', color: '#64748b' }}>00:07 · no speech yet</div>
-                </div>
-
-                {/* Call 1: P1 INC-4A1C */}
-                <div
-                  className={`queue-card-181 ${selectedCallId === 'INC-4A1C' ? 'active' : ''}`}
-                  onClick={() => setSelectedCallId('INC-4A1C')}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ background: '#dc2626', color: 'white', fontSize: '0.62rem', fontWeight: 800, padding: '1px 5px', borderRadius: '2px' }}>
-                      P1 INC-4A1C
+                      {!hasInput ? 'STANDBY' : effectiveUrgency === 'CRITICAL' ? 'P1' : effectiveUrgency === 'SEVERE' ? 'P2' : effectiveUrgency === 'MODERATE' ? 'P3' : 'P4'}{' '}
+                      {reportCode}
                     </span>
-                    <span style={{ color: '#64748b', fontSize: '0.65rem' }}>01:15</span>
+                    <span style={{ color: hasInput ? '#16a34a' : '#64748b', fontSize: '0.65rem', fontWeight: 700 }}>
+                      {formatDuration(callDuration)}
+                    </span>
                   </div>
-                  <div style={{ fontSize: '0.66rem', color: '#1e293b', marginTop: '2px' }}>
-                    Knife · children present · OP-03
+                  <div style={{ fontSize: '0.66rem', color: '#1e293b', marginTop: '2px', fontWeight: hasInput ? 700 : 500 }}>
+                    {hasInput ? (rawCallerText.slice(0, 42) + (rawCallerText.length > 42 ? '…' : '')) : 'Inbound channel listening on standby...'}
+                  </div>
+                  <div style={{ fontSize: '0.6rem', color: hasInput && !triage?.callerConstraints?.canSpeakFreely ? '#dc2626' : '#2563eb', fontWeight: 700 }}>
+                    {hasInput ? (!triage?.callerConstraints?.canSpeakFreely ? 'Coded call flagged · Live' : 'Live Connected · Operator OP-07') : 'Ready for caller input'}
                   </div>
                 </div>
 
-                {/* Call 2: P2 INC-4A21 (Selected Active) */}
-                <div
-                  className={`queue-card-181 ${selectedCallId === 'INC-4A21' ? 'active' : ''}`}
-                  onClick={() => setSelectedCallId('INC-4A21')}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ background: '#ea580c', color: 'white', fontSize: '0.62rem', fontWeight: 800, padding: '1px 5px', borderRadius: '2px' }}>
-                      P2 INC-4A21
-                    </span>
-                    <span style={{ color: '#16a34a', fontSize: '0.65rem', fontWeight: 700 }}>02:59</span>
+                {!hasInput && (
+                  <div style={{ padding: '24px 10px', textAlign: 'center', color: '#64748b', fontSize: '0.66rem' }}>
+                    No other distress calls in queue. Channels ready for inbound transmissions.
                   </div>
-                  <div style={{ fontSize: '0.66rem', color: '#1e293b', marginTop: '2px', fontWeight: 700 }}>
-                    Coded call · on your line
-                  </div>
-                </div>
-
-                {/* Call 3: P2 INC-4A1D */}
-                <div
-                  className={`queue-card-181 ${selectedCallId === 'INC-4A1D' ? 'active' : ''}`}
-                  onClick={() => setSelectedCallId('INC-4A1D')}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ background: '#ea580c', color: 'white', fontSize: '0.62rem', fontWeight: 800, padding: '1px 5px', borderRadius: '2px' }}>
-                      P2 INC-4A1D
-                    </span>
-                    <span style={{ color: '#64748b', fontSize: '0.65rem' }}>00:42</span>
-                  </div>
-                  <div style={{ fontSize: '0.66rem', color: '#c2410c', marginTop: '2px' }}>
-                    Coded · "pizza bhej do" · unassigned
-                  </div>
-                </div>
-
-                {/* Call 4: P3 INC-4A20 (Dropped wait) */}
-                <div
-                  className={`queue-card-181 ${selectedCallId === 'INC-4A20' ? 'active' : ''}`}
-                  onClick={() => setSelectedCallId('INC-4A20')}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ background: '#d97706', color: 'white', fontSize: '0.62rem', fontWeight: 800, padding: '1px 5px', borderRadius: '2px' }}>
-                      P3 INC-4A20
-                    </span>
-                    <span style={{ color: '#dc2626', fontSize: '0.65rem', fontWeight: 800 }}>08:26</span>
-                  </div>
-                  <div style={{ fontSize: '0.66rem', color: '#1e293b', marginTop: '2px' }}>
-                    Dropped · safety unconfirmed
-                  </div>
-                </div>
-
-                {/* Call 5: P3 INC-4A1E */}
-                <div
-                  className={`queue-card-181 ${selectedCallId === 'INC-4A1E' ? 'active' : ''}`}
-                  onClick={() => setSelectedCallId('INC-4A1E')}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ background: '#d97706', color: 'white', fontSize: '0.62rem', fontWeight: 800, padding: '1px 5px', borderRadius: '2px' }}>
-                      P3 INC-4A1E
-                    </span>
-                    <span style={{ color: '#64748b', fontSize: '0.65rem' }}>03:33</span>
-                  </div>
-                  <div style={{ fontSize: '0.66rem', color: '#1e293b', marginTop: '2px' }}>
-                    Stalking · possible repeat
-                  </div>
-                </div>
-
-                {/* Call 6: P4 INC-4A1F */}
-                <div
-                  className={`queue-card-181 ${selectedCallId === 'INC-4A1F' ? 'active' : ''}`}
-                  onClick={() => setSelectedCallId('INC-4A1F')}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ background: '#64748b', color: 'white', fontSize: '0.62rem', fontWeight: 800, padding: '1px 5px', borderRadius: '2px' }}>
-                      P4 INC-4A1F
-                    </span>
-                    <span style={{ color: '#64748b', fontSize: '0.65rem' }}>06:29</span>
-                  </div>
-                  <div style={{ fontSize: '0.66rem', color: '#1e293b', marginTop: '2px' }}>
-                    Legal help · custody
-                  </div>
-                </div>
+                )}
               </div>
 
               {/* Bottom Priority Badges Row */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', padding: '6px 8px', borderTop: '1px solid #cbd5e1', gap: '4px', textAlign: 'center', background: '#f8fafc' }}>
                 <div style={{ padding: '2px' }}>
-                  <span style={{ fontSize: '0.84rem', fontWeight: 900, color: '#dc2626' }}>1</span>
+                  <span style={{ fontSize: '0.84rem', fontWeight: 900, color: effectiveUrgency === 'CRITICAL' && hasInput ? '#dc2626' : '#94a3b8' }}>
+                    {effectiveUrgency === 'CRITICAL' && hasInput ? 1 : 0}
+                  </span>
                   <span style={{ fontSize: '0.6rem', color: '#64748b', marginLeft: '3px' }}>P1</span>
                 </div>
                 <div style={{ padding: '2px' }}>
-                  <span style={{ fontSize: '0.84rem', fontWeight: 900, color: '#ea580c' }}>2</span>
+                  <span style={{ fontSize: '0.84rem', fontWeight: 900, color: effectiveUrgency === 'SEVERE' && hasInput ? '#ea580c' : '#94a3b8' }}>
+                    {effectiveUrgency === 'SEVERE' && hasInput ? 1 : 0}
+                  </span>
                   <span style={{ fontSize: '0.6rem', color: '#64748b', marginLeft: '3px' }}>P2</span>
                 </div>
                 <div style={{ padding: '2px' }}>
-                  <span style={{ fontSize: '0.84rem', fontWeight: 900, color: '#d97706' }}>2</span>
+                  <span style={{ fontSize: '0.84rem', fontWeight: 900, color: effectiveUrgency === 'MODERATE' && hasInput ? '#d97706' : '#94a3b8' }}>
+                    {effectiveUrgency === 'MODERATE' && hasInput ? 1 : 0}
+                  </span>
                   <span style={{ fontSize: '0.6rem', color: '#64748b', marginLeft: '3px' }}>P3</span>
                 </div>
                 <div style={{ padding: '2px' }}>
-                  <span style={{ fontSize: '0.84rem', fontWeight: 900, color: '#64748b' }}>1</span>
+                  <span style={{ fontSize: '0.84rem', fontWeight: 900, color: effectiveUrgency === 'LOW' && hasInput ? '#16a34a' : '#94a3b8' }}>
+                    {effectiveUrgency === 'LOW' && hasInput ? 1 : 0}
+                  </span>
                   <span style={{ fontSize: '0.6rem', color: '#64748b', marginLeft: '3px' }}>P4</span>
                 </div>
               </div>
@@ -706,78 +703,78 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
                     <span style={{ fontSize: '0.74rem', fontWeight: 800, color: '#0f172a' }}>LIVE TRANSCRIPT</span>
                     <span style={{ fontSize: '0.66rem', color: '#64748b' }}>hi-IN · saarika v2 · streaming</span>
                   </div>
-                  <span style={{ fontSize: '0.66rem', fontWeight: 800, color: '#dc2626', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <Radio size={12} />
-                    <span>WHISPER</span>
-                  </span>
+                  {hasInput && !triage?.callerConstraints?.canSpeakFreely && (
+                    <span style={{ fontSize: '0.66rem', fontWeight: 800, color: '#dc2626', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Radio size={12} />
+                      <span>WHISPER MODE</span>
+                    </span>
+                  )}
                 </div>
 
-                {/* Chronological Transcript Entries */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', fontSize: '0.74rem', lineHeight: 1.45, color: '#1e293b' }}>
+                {/* Real Live Transcript Entries */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.74rem', lineHeight: 1.45, color: '#1e293b', minHeight: '120px' }}>
                   <div style={{ display: 'flex', gap: '8px' }}>
-                    <span style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.66rem', width: '54px' }}>09:38:36</span>
+                    <span style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.66rem', width: '54px' }}>00:00:00</span>
                     <span style={{ color: '#64748b', fontWeight: 800, width: '54px' }}>SYSTEM</span>
-                    <span>Call connected · network area Paschim Vihar</span>
+                    <span>CAD Inbound Session connected · {extractedLocation || 'Delhi CRC Network'} · ASR active</span>
                   </div>
 
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <span style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.66rem', width: '54px' }}>09:38:52</span>
-                    <span style={{ color: '#dc2626', fontWeight: 800, width: '54px' }}>CALLER</span>
-                    <span>Haan mummy, <span className="keyword-yellow-tag">sab theek hai</span><sup>4</sup>, khana bana rahi hoon...</span>
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '8px', color: '#7c3aed', fontStyle: 'italic' }}>
-                    <span style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.66rem', width: '54px' }}>09:38:58</span>
-                    <span style={{ fontWeight: 800, width: '54px' }}>AUDIO</span>
-                    <span>Voice drops to whisper<sup>1</sup></span>
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <span style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.66rem', width: '54px' }}>09:38:59</span>
-                    <span style={{ color: '#dc2626', fontWeight: 800, width: '54px' }}>CALLER</span>
-                    <span>
-                      please... <span className="keyword-yellow-tag">kisi ko bhejo</span><sup>3</sup>... <span className="keyword-yellow-tag">woh ghar pe hai</span><sup>2</sup>{' '}
-                      <span style={{ color: '#ea580c', fontWeight: 800, fontSize: '0.66rem' }}>→ P2 FLOOR</span>
-                    </span>
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '8px', color: '#7c3aed', fontStyle: 'italic' }}>
-                    <span style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.66rem', width: '54px' }}>09:39:07</span>
-                    <span style={{ fontWeight: 800, width: '54px' }}>AUDIO</span>
-                    <span>Male voice, background: "kisse baat kar rahi hai?"<sup>5</sup></span>
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <span style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.66rem', width: '54px' }}>09:39:10</span>
-                    <span style={{ color: '#dc2626', fontWeight: 800, width: '54px' }}>CALLER</span>
-                    <span>koi nahi... galat number hai</span>
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <span style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.66rem', width: '54px' }}>09:39:31</span>
-                    <span style={{ color: '#2563eb', fontWeight: 800, width: '54px' }}>OP-07</span>
-                    <span>Aap sirf haan ya na mein jawab dijiye. Kya aap ghar par hain?</span>
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '8px', color: '#16a34a' }}>
-                    <span style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.66rem', width: '54px' }}>09:39:40</span>
-                    <span style={{ fontWeight: 800, width: '54px' }}>DEVICE</span>
-                    <span>Tap response: <strong>HAAN — at home</strong></span>
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <span style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.66rem', width: '54px' }}>09:41:33</span>
-                    <span style={{ color: '#dc2626', fontWeight: 800, width: '54px' }}>CALLER</span>
-                    <span>woh... darwaze pe khada hai...</span>
-                  </div>
-
-                  {/* Dynamic Speech line if caller is speaking right now */}
-                  {inputText && (
-                    <div style={{ display: 'flex', gap: '8px', background: '#eff6ff', padding: '4px 6px', borderRadius: '4px' }}>
-                      <span style={{ color: '#2563eb', fontFamily: 'monospace', fontSize: '0.66rem', width: '54px' }}>LIVE</span>
-                      <span style={{ color: '#16a34a', fontWeight: 800, width: '54px' }}>CALLER</span>
-                      <span style={{ fontWeight: 600 }}>{inputText}</span>
+                  {!hasInput ? (
+                    <div style={{ padding: '24px 10px', textAlign: 'center', color: '#64748b', fontStyle: 'italic', background: '#f8fafc', borderRadius: '4px', border: '1px dashed #cbd5e1', marginTop: '6px' }}>
+                      🎙️ Waiting for caller input. When the citizen speaks, whispers, or types a message on the smartphone, their live transcript and detected distress signals will appear here in real time.
                     </div>
+                  ) : (
+                    <>
+                      {/* Whisper / Duress Audio Signal if detected */}
+                      {!triage?.callerConstraints?.canSpeakFreely && (
+                        <div style={{ display: 'flex', gap: '8px', color: '#7c3aed', fontStyle: 'italic' }}>
+                          <span style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.66rem', width: '54px' }}>AUDIO</span>
+                          <span style={{ fontWeight: 800, width: '54px' }}>SENSOR</span>
+                          <span>Voice drops to whisper / restricted speech detected</span>
+                        </div>
+                      )}
+
+                      {/* Caller Actual Statement with Highlighted Evidence Keywords */}
+                      <div style={{ display: 'flex', gap: '8px', background: '#f8fafc', padding: '6px 8px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
+                        <span style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.66rem', width: '54px' }}>LIVE</span>
+                        <span style={{ color: '#dc2626', fontWeight: 800, width: '54px' }}>CALLER</span>
+                        <span style={{ flex: 1 }}>
+                          {(() => {
+                            const keywords = (triage?.evidenceLinks || [])
+                              .map((e: EvidenceItem) => e.quoteHinglish.toLowerCase().trim())
+                              .filter((w: string) => w && w.length > 1);
+
+                            if (!keywords.length) return rawCallerText;
+
+                            const sortedKeywords = [...keywords].sort((a, b) => b.length - a.length);
+                            const regex = new RegExp(`(${sortedKeywords.map((k: string) => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'gi');
+                            const parts = rawCallerText.split(regex);
+                            const evidenceMap = new Map((triage.evidenceLinks || []).map((e: EvidenceItem) => [e.quoteHinglish.toLowerCase().trim(), e]));
+
+                            return parts.map((part, i) => {
+                              const matchedEv = evidenceMap.get(part.toLowerCase());
+                              if (matchedEv) {
+                                return (
+                                  <mark key={i} className="keyword-yellow-tag" title={matchedEv.label}>
+                                    {part}
+                                  </mark>
+                                );
+                              }
+                              return <span key={i}>{part}</span>;
+                            });
+                          })()}
+                        </span>
+                      </div>
+
+                      {/* Device Tap Response if Citizen Answered */}
+                      {selectedAnswer && (
+                        <div style={{ display: 'flex', gap: '8px', color: '#16a34a' }}>
+                          <span style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.66rem', width: '54px' }}>DEVICE</span>
+                          <span style={{ fontWeight: 800, width: '54px' }}>TAP</span>
+                          <span>Response: <strong>{selectedAnswer === 'Haan' ? 'HAAN (YES)' : selectedAnswer === 'Nahi' ? 'NAHI (NO)' : 'NO RESPONSE (SILENT)'}</strong></span>
+                        </div>
+                      )}
+                    </>
                   )}
 
                   {notesList.map((note, idx) => (
@@ -828,12 +825,14 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
                 </div>
               </div>
 
-              {/* NEXT SAFE QUESTION Box (Matching Image 3) */}
+              {/* NEXT SAFE QUESTION Box */}
               <div className="safesignal-box-181">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#1d4ed8' }}>NEXT SAFE QUESTION</span>
-                    <span style={{ fontSize: '0.66rem', color: '#64748b' }}>targets: danger now</span>
+                    <span style={{ fontSize: '0.66rem', color: '#64748b' }}>
+                      {hasInput ? (questions && questions[0] ? `targets: ${questions[0].category.replace(/_/g, ' ')}` : 'targets: danger assessment') : 'awaiting caller statement'}
+                    </span>
                   </div>
                   <span style={{ fontSize: '0.66rem', color: '#16a34a', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '3px' }}>
                     <Check size={12} strokeWidth={3} />
@@ -841,58 +840,66 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
                   </span>
                 </div>
 
-                {/* Big Question Prompt */}
+                {/* Question Prompt */}
                 <div>
-                  <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#0f172a' }}>
-                    {questions && questions[0] ? `“${questions[0].hinglishText || questions[0].questionText}”` : '“Kya aap abhi khatre mein hain?”'}
+                  <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#0f172a' }}>
+                    {!hasInput ? (
+                      '“Awaiting citizen input to determine first safety question”'
+                    ) : questions && questions[0] ? (
+                      `“${questions[0].hinglishText || questions[0].questionText}”`
+                    ) : (
+                      '“Kya aap abhi khatre mein hain?”'
+                    )}
                   </div>
                   <div style={{ fontSize: '0.68rem', color: '#64748b', marginTop: '2px' }}>
-                    Are you in danger right now? · one silent tap
+                    {hasInput ? 'One silent tap question for caller phone' : 'SafeSignal evaluates incoming statements before generating safe binary questions.'}
                   </div>
                 </div>
 
                 {/* Buttons Row */}
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button
-                    onClick={() => {
-                      alert('Speaking question aloud to caller on audio line.');
-                    }}
-                    style={{
-                      background: '#ffffff',
-                      border: '1px solid #cbd5e1',
-                      color: '#0f172a',
-                      padding: '5px 12px',
-                      borderRadius: '4px',
-                      fontSize: '0.72rem',
-                      fontWeight: 700,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Read aloud
-                  </button>
+                {hasInput && (
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      onClick={() => {
+                        alert('Speaking question aloud to caller on audio line.');
+                      }}
+                      style={{
+                        background: '#ffffff',
+                        border: '1px solid #cbd5e1',
+                        color: '#0f172a',
+                        padding: '5px 12px',
+                        borderRadius: '4px',
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Read aloud
+                    </button>
 
-                  <button
-                    onClick={() => {
-                      if (questions && questions[0] && onSendCustomQuestion) {
-                        onSendCustomQuestion(questions[0].hinglishText || questions[0].questionText);
-                        setIsCustomQuestionSent(true);
-                        setTimeout(() => setIsCustomQuestionSent(false), 3000);
-                      }
-                    }}
-                    style={{
-                      background: '#2563eb',
-                      border: 'none',
-                      color: '#ffffff',
-                      padding: '5px 14px',
-                      borderRadius: '4px',
-                      fontSize: '0.72rem',
-                      fontWeight: 800,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Send to caller's phone
-                  </button>
-                </div>
+                    <button
+                      onClick={() => {
+                        if (questions && questions[0] && onSendCustomQuestion) {
+                          onSendCustomQuestion(questions[0].hinglishText || questions[0].questionText);
+                          setIsCustomQuestionSent(true);
+                          setTimeout(() => setIsCustomQuestionSent(false), 3000);
+                        }
+                      }}
+                      style={{
+                        background: '#2563eb',
+                        border: 'none',
+                        color: '#ffffff',
+                        padding: '5px 14px',
+                        borderRadius: '4px',
+                        fontSize: '0.72rem',
+                        fontWeight: 800,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Send to caller's phone
+                    </button>
+                  </div>
+                )}
 
                 {/* 3 Decision Cards */}
                 <div className="decision-3-grid">
@@ -901,7 +908,8 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
                     className="btn-operator-decision"
                     style={{
                       background: selectedAnswer === 'Haan' ? '#fee2e2' : '#ffffff',
-                      borderColor: selectedAnswer === 'Haan' ? '#dc2626' : '#cbd5e1'
+                      borderColor: selectedAnswer === 'Haan' ? '#dc2626' : '#cbd5e1',
+                      cursor: hasInput ? 'pointer' : 'default'
                     }}
                   >
                     <div>
@@ -915,7 +923,8 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
                     className="btn-operator-decision"
                     style={{
                       background: selectedAnswer === 'Nahi' ? '#eff6ff' : '#ffffff',
-                      borderColor: selectedAnswer === 'Nahi' ? '#2563eb' : '#cbd5e1'
+                      borderColor: selectedAnswer === 'Nahi' ? '#2563eb' : '#cbd5e1',
+                      cursor: hasInput ? 'pointer' : 'default'
                     }}
                   >
                     <div>
@@ -929,7 +938,8 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
                     className="btn-operator-decision"
                     style={{
                       background: selectedAnswer === 'NoAnswer' ? '#f1f5f9' : '#ffffff',
-                      borderColor: selectedAnswer === 'NoAnswer' ? '#64748b' : '#cbd5e1'
+                      borderColor: selectedAnswer === 'NoAnswer' ? '#64748b' : '#cbd5e1',
+                      cursor: hasInput ? 'pointer' : 'default'
                     }}
                   >
                     <div>
@@ -937,14 +947,6 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
                     </div>
                     <div style={{ fontSize: '0.64rem', color: '#475569' }}>Safety unconfirmed · retry 20 s</div>
                   </div>
-                </div>
-
-                {/* Queued Questions Strip */}
-                <div style={{ fontSize: '0.66rem', color: '#2563eb', marginTop: '2px', display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
-                  <span style={{ color: '#64748b' }}>Queued:</span>
-                  <span style={{ cursor: 'pointer' }}>Kya woh abhi aapke paas hai?</span>
-                  <span style={{ cursor: 'pointer' }}>Kya bachche saath hain?</span>
-                  <span style={{ cursor: 'pointer' }}>Kya chot lagi hai?</span>
                 </div>
 
                 {/* Custom Question Direct Input */}
@@ -973,15 +975,16 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
                         setTimeout(() => setIsCustomQuestionSent(false), 3000);
                       }
                     }}
+                    disabled={!customQuestionInput.trim()}
                     style={{
-                      background: '#2563eb',
+                      background: customQuestionInput.trim() ? '#2563eb' : '#94a3b8',
                       border: 'none',
                       color: 'white',
                       padding: '5px 10px',
                       borderRadius: '4px',
                       fontSize: '0.68rem',
                       fontWeight: 700,
-                      cursor: 'pointer'
+                      cursor: customQuestionInput.trim() ? 'pointer' : 'default'
                     }}
                   >
                     Send to Phone
@@ -1004,70 +1007,64 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
                   <span style={{ fontSize: '0.62rem', color: '#64748b' }}>advisory · operator decides</span>
                 </div>
 
-                {/* Spectrum Bar: P4 0:00  P3 0:22  P2 0:23 ■  P1 — */}
+                {/* Spectrum Bar */}
                 <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.64rem', color: '#64748b' }}>
                     <span>P4 0:00</span>
                     <span>P3 0:22</span>
-                    <span style={{ color: '#ea580c', fontWeight: 800 }}>P2 0:23 ■</span>
+                    <span style={{ color: effectiveUrgency === 'SEVERE' ? '#ea580c' : effectiveUrgency === 'CRITICAL' ? '#dc2626' : '#64748b', fontWeight: 800 }}>
+                      {effectiveUrgency === 'CRITICAL' ? 'P1 ■' : effectiveUrgency === 'SEVERE' ? 'P2 ■' : 'P2'}
+                    </span>
                     <span>P1 —</span>
                   </div>
                   <div style={{ height: '6px', width: '100%', background: '#e2e8f0', borderRadius: '3px', overflow: 'hidden', display: 'flex' }}>
-                    <div style={{ width: '25%', background: '#94a3b8' }} />
-                    <div style={{ width: '25%', background: '#d97706' }} />
-                    <div style={{ width: '25%', background: '#ea580c' }} />
-                    <div style={{ width: '25%', background: '#f1f5f9' }} />
+                    <div style={{ width: '25%', background: hasInput ? '#94a3b8' : '#e2e8f0' }} />
+                    <div style={{ width: '25%', background: hasInput && effectiveUrgency !== 'LOW' ? '#f59e0b' : '#e2e8f0' }} />
+                    <div style={{ width: '25%', background: hasInput && (effectiveUrgency === 'SEVERE' || effectiveUrgency === 'CRITICAL') ? '#ea580c' : '#e2e8f0' }} />
+                    <div style={{ width: '25%', background: hasInput && effectiveUrgency === 'CRITICAL' ? '#dc2626' : '#e2e8f0' }} />
                   </div>
                 </div>
 
-                {/* Signals Table */}
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.66rem' }}>
-                  <thead>
-                    <tr style={{ color: '#64748b', textAlign: 'left', borderBottom: '1px solid #f1f5f9' }}>
-                      <th style={{ padding: '3px', width: '14px' }}>#</th>
-                      <th>SIGNAL</th>
-                      <th style={{ textAlign: 'right' }}>EFFECT</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr style={{ borderBottom: '1px solid #f8fafc' }}>
-                      <td style={{ padding: '4px 3px', color: '#64748b' }}>2</td>
-                      <td><strong>“woh ghar pe hai”</strong> abuser present</td>
-                      <td style={{ textAlign: 'right', color: '#ea580c', fontWeight: 800 }}>FLOOR P2</td>
-                    </tr>
-                    <tr style={{ borderBottom: '1px solid #f8fafc' }}>
-                      <td style={{ padding: '4px 3px', color: '#64748b' }}>3</td>
-                      <td><strong>“kisi ko bhejo”</strong> help request</td>
-                      <td style={{ textAlign: 'right', color: '#ea580c', fontWeight: 800 }}>FLOOR P2</td>
-                    </tr>
-                    <tr style={{ borderBottom: '1px solid #f8fafc' }}>
-                      <td style={{ padding: '4px 3px', color: '#64748b' }}>1</td>
-                      <td>Whisper mid-sentence</td>
-                      <td style={{ textAlign: 'right', color: '#d97706', fontWeight: 800 }}>→ P3</td>
-                    </tr>
-                    <tr style={{ borderBottom: '1px solid #f8fafc' }}>
-                      <td style={{ padding: '4px 3px', color: '#64748b' }}>4</td>
-                      <td><strong>“sab theek hai”</strong> denial under duress</td>
-                      <td style={{ textAlign: 'right', color: '#64748b', fontWeight: 800 }}>NO DOWNGRADE</td>
-                    </tr>
-                    <tr>
-                      <td style={{ padding: '4px 3px', color: '#64748b' }}>5</td>
-                      <td>Male voice + “galat number”</td>
-                      <td style={{ textAlign: 'right', color: '#0f172a', fontWeight: 800 }}>CODED</td>
-                    </tr>
-                  </tbody>
-                </table>
+                {/* Dynamic Signals Table from Real Input */}
+                {triage?.evidenceLinks && triage.evidenceLinks.length > 0 ? (
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.66rem' }}>
+                    <thead>
+                      <tr style={{ color: '#64748b', textAlign: 'left', borderBottom: '1px solid #f1f5f9' }}>
+                        <th style={{ padding: '3px', width: '14px' }}>#</th>
+                        <th>SIGNAL</th>
+                        <th style={{ textAlign: 'right' }}>EFFECT</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {triage.evidenceLinks.map((ev: EvidenceItem, idx: number) => (
+                        <tr key={idx} style={{ borderBottom: '1px solid #f8fafc' }}>
+                          <td style={{ padding: '4px 3px', color: '#64748b' }}>{idx + 1}</td>
+                          <td><strong>“{ev.quoteHinglish}”</strong> {ev.label}</td>
+                          <td style={{ textAlign: 'right', color: ev.severity === 'critical' ? '#dc2626' : ev.severity === 'high' ? '#ea580c' : '#d97706', fontWeight: 800 }}>
+                            {ev.severity === 'critical' ? 'FLOOR P1' : ev.severity === 'high' ? 'FLOOR P2' : '→ P3'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <div style={{ padding: '12px 6px', textAlign: 'center', color: '#64748b', fontSize: '0.66rem', fontStyle: 'italic' }}>
+                    {hasInput ? 'Analyzing statements for priority keywords...' : 'No distress signals detected yet. Baseline priority floor: Routine.'}
+                  </div>
+                )}
 
                 <div style={{ fontSize: '0.62rem', color: '#64748b', marginTop: '2px' }}>
                   P1 triggers: <span style={{ color: '#dc2626' }}>Haan to danger · weapon · injury · child at risk</span>
                 </div>
               </div>
 
-              {/* TACTICAL MAP & CELL AREA (Matching Image 3) */}
+              {/* TACTICAL MAP & CELL AREA */}
               <div style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <div style={{ background: '#fef3c7', border: '1px solid #fde68a', borderRadius: '4px', padding: '4px 8px', fontSize: '0.66rem' }}>
-                  <div style={{ fontWeight: 800, color: '#92400e' }}>CELL AREA · ±600 m</div>
-                  <div style={{ color: '#78350f' }}>Paschim Vihar, A-4 block</div>
+                  <div style={{ fontWeight: 800, color: '#92400e' }}>
+                    CELL AREA · {isLocationConfirmed ? '±20 m (GPS Precision)' : '±600 m (Tower Area)'}
+                  </div>
+                  <div style={{ color: '#78350f' }}>{extractedLocation || 'Paschim Vihar, A-4 block, New Delhi'}</div>
                 </div>
 
                 <div style={{ height: isMapExpanded ? '300px' : '150px', borderRadius: '4px', overflow: 'hidden', border: '1px solid #cbd5e1', transition: 'height 0.2s' }}>
@@ -1107,7 +1104,7 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
                 </div>
               </div>
 
-              {/* NEAREST RESOURCES · ROAD ETA (Matching Image 3) */}
+              {/* NEAREST RESOURCES · ROAD ETA */}
               <div style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#0f172a' }}>NEAREST RESOURCES</span>
@@ -1255,27 +1252,40 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
       )}
 
       {/* ======================================================== */}
-      {/* 3. TAB: INCIDENTS VIEW (IMAGE 2)                         */}
+      {/* 3. TAB: INCIDENTS VIEW (FULLY DYNAMIC)                   */}
       {/* ======================================================== */}
       {activeTab === 'incidents' && (
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
-          {/* Active Incident Red Banner (Matching Image 2) */}
+          {/* Active Incident Banner */}
           <div className="active-call-top-banner">
             <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-              {/* Square P1 Block */}
-              <div className="urgency-square-p1">
-                <div className="urgency-square-num">P1</div>
-                <div className="urgency-square-text">CRITICAL</div>
-              </div>
+              {!hasInput ? (
+                <div className="urgency-square-p4" style={{ background: '#64748b' }}>
+                  <div className="urgency-square-num" style={{ fontSize: '1.05rem' }}>IDLE</div>
+                  <div className="urgency-square-text">STANDBY</div>
+                </div>
+              ) : effectiveUrgency === 'CRITICAL' ? (
+                <div className="urgency-square-p1">
+                  <div className="urgency-square-num">P1</div>
+                  <div className="urgency-square-text">CRITICAL</div>
+                </div>
+              ) : (
+                <div className="urgency-square-p2">
+                  <div className="urgency-square-num">P2</div>
+                  <div className="urgency-square-text">HIGH</div>
+                </div>
+              )}
 
               <div>
                 <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>
-                  INC-4A1C Assault with weapon — knife, two children present
+                  {hasInput
+                    ? `${reportCode} ${triage?.threats?.length ? triage.threats.join(' · ') : 'Distress Report'} — Inbound Incident`
+                    : `${reportCode} · Shift Inbound Docket (Standby)`}
                 </div>
                 <div style={{ fontSize: '0.72rem', color: '#475569', marginTop: '2px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                  <span>Shiv Colony, Gali 4, near temple · <strong style={{ color: '#16a34a' }}>location confirmed</strong></span>
-                  <span>Contact SMS only · <strong style={{ color: '#dc2626' }}>no callbacks</strong></span>
-                  <span>Handled by OP-03</span>
+                  <span>{extractedLocation || 'Paschim Vihar'} · <strong style={{ color: isLocationConfirmed ? '#16a34a' : '#ea580c' }}>{isLocationConfirmed ? 'location confirmed' : 'locating'}</strong></span>
+                  <span>Contact SMS only · <strong style={{ color: hasInput ? '#dc2626' : '#64748b' }}>{hasInput ? 'no callbacks' : 'standby'}</strong></span>
+                  <span>Handled by OP-07</span>
                 </div>
               </div>
             </div>
@@ -1283,21 +1293,26 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
             {/* Right Buttons */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#ea580c' }}>CALL ENDED · OPEN</div>
-                <div style={{ fontSize: '0.65rem', color: '#64748b' }}>caller safety not confirmed</div>
+                <div style={{ fontSize: '0.72rem', fontWeight: 800, color: hasInput ? '#ea580c' : '#64748b' }}>
+                  {hasInput ? (isCallEnded ? 'CALL ENDED · OPEN' : 'CALL ACTIVE') : 'STANDBY'}
+                </div>
+                <div style={{ fontSize: '0.65rem', color: '#64748b' }}>
+                  {hasInput ? 'caller safety assessing' : 'awaiting distress input'}
+                </div>
               </div>
 
               <button
-                onClick={() => alert('Incident docket brief exported as PDF.')}
+                onClick={() => alert('Incident docket brief exported.')}
+                disabled={!hasInput}
                 style={{
                   background: '#ffffff',
                   border: '1px solid #cbd5e1',
-                  color: '#0f172a',
+                  color: hasInput ? '#0f172a' : '#94a3b8',
                   padding: '6px 14px',
                   borderRadius: '4px',
                   fontSize: '0.72rem',
                   fontWeight: 700,
-                  cursor: 'pointer'
+                  cursor: hasInput ? 'pointer' : 'default'
                 }}
               >
                 Export brief
@@ -1305,15 +1320,16 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
 
               <button
                 onClick={() => alert('Silent SMS check-in sent to caller handset.')}
+                disabled={!hasInput}
                 style={{
-                  background: '#2563eb',
+                  background: hasInput ? '#2563eb' : '#94a3b8',
                   border: 'none',
                   color: '#ffffff',
                   padding: '6px 14px',
                   borderRadius: '4px',
                   fontSize: '0.72rem',
                   fontWeight: 800,
-                  cursor: 'pointer'
+                  cursor: hasInput ? 'pointer' : 'default'
                 }}
               >
                 Send SMS check-in
@@ -1321,22 +1337,22 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
             </div>
           </div>
 
-          {/* Metrics Strip (Matching Image 2) */}
+          {/* Metrics Strip */}
           <div style={{ background: '#ffffff', borderBottom: '1px solid #e2e8f0', padding: '6px 16px', display: 'flex', alignItems: 'center', gap: '24px', fontSize: '0.72rem' }}>
             <span style={{ fontSize: '0.62rem', fontWeight: 800, color: '#64748b' }}>METRICS</span>
-            <span>Answered in <strong style={{ color: '#0f172a' }}>00:07</strong></span>
-            <span>Priority set <strong style={{ color: '#0f172a' }}>00:02 after speech</strong></span>
-            <span>First safe question <strong style={{ color: '#0f172a' }}>00:22</strong></span>
-            <span>Call length <strong style={{ color: '#0f172a' }}>04:12</strong></span>
-            <span>Police <strong style={{ color: '#2563eb' }}>En route · ack 09:47</strong></span>
+            <span>Answered in <strong style={{ color: '#0f172a' }}>{hasInput ? '00:02' : '--:--'}</strong></span>
+            <span>Priority set <strong style={{ color: '#0f172a' }}>{hasInput ? '00:02 after speech' : 'standby'}</strong></span>
+            <span>First safe question <strong style={{ color: '#0f172a' }}>{hasInput ? '00:08' : '--:--'}</strong></span>
+            <span>Call length <strong style={{ color: '#0f172a' }}>{formatDuration(callDuration)}</strong></span>
+            <span>Police <strong style={{ color: agencies?.police?.status === 'DISPATCHED' ? '#2563eb' : '#64748b' }}>{agencies?.police?.status === 'DISPATCHED' ? 'En route · ack' : 'Standby'}</strong></span>
           </div>
 
           {/* 3 Columns Layout */}
           <div style={{ display: 'grid', gridTemplateColumns: '240px 1fr 340px', flex: 1, overflow: 'hidden' }}>
-            {/* Col 1: THIS SHIFT · 23 */}
+            {/* Col 1: Shift Incidents */}
             <aside style={{ background: '#ffffff', borderRight: '1px solid #cbd5e1', padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '0.74rem', fontWeight: 800, color: '#0f172a' }}>THIS SHIFT · 23</span>
+                <span style={{ fontSize: '0.74rem', fontWeight: 800, color: '#0f172a' }}>THIS SHIFT · {hasInput ? '1' : '0'}</span>
                 <div style={{ display: 'flex', gap: '3px' }}>
                   <button
                     onClick={() => setIncidentFilter('open')}
@@ -1389,125 +1405,59 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
 
               {/* Incidents Cards */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', overflowY: 'auto' }}>
-                {/* INC-4A1C */}
                 <div
-                  onClick={() => setSelectedIncidentId('INC-4A1C')}
+                  onClick={() => setSelectedIncidentId(reportCode)}
                   style={{
-                    background: selectedIncidentId === 'INC-4A1C' ? '#f8fafc' : '#ffffff',
-                    border: selectedIncidentId === 'INC-4A1C' ? '1.5px solid #dc2626' : '1px solid #e2e8f0',
+                    background: selectedIncidentId === reportCode ? '#f8fafc' : '#ffffff',
+                    border: selectedIncidentId === reportCode ? '1.5px solid #2563eb' : '1px solid #e2e8f0',
                     borderRadius: '4px',
                     padding: '8px',
                     cursor: 'pointer'
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ background: '#dc2626', color: 'white', fontSize: '0.62rem', fontWeight: 800, padding: '1px 5px', borderRadius: '2px' }}>
-                      P1 INC-4A1C
+                    <span
+                      style={{
+                        background: !hasInput
+                          ? '#64748b'
+                          : effectiveUrgency === 'CRITICAL'
+                          ? '#dc2626'
+                          : effectiveUrgency === 'SEVERE'
+                          ? '#ea580c'
+                          : '#16a34a',
+                        color: 'white',
+                        fontSize: '0.62rem',
+                        fontWeight: 800,
+                        padding: '1px 5px',
+                        borderRadius: '2px'
+                      }}
+                    >
+                      {!hasInput ? 'STANDBY' : effectiveUrgency === 'CRITICAL' ? 'P1' : effectiveUrgency === 'SEVERE' ? 'P2' : 'P3'} {reportCode}
                     </span>
-                    <span style={{ fontSize: '0.6rem', color: '#c2410c', fontWeight: 800 }}>NEEDS NOTE</span>
+                    <span style={{ fontSize: '0.6rem', color: hasInput ? '#16a34a' : '#64748b', fontWeight: 800 }}>
+                      {hasInput ? 'LIVE' : 'READY'}
+                    </span>
                   </div>
                   <div style={{ fontSize: '0.66rem', color: '#1e293b', marginTop: '2px' }}>
-                    Knife · children · Shiv Colony
+                    {hasInput ? (rawCallerText.slice(0, 36) + (rawCallerText.length > 36 ? '…' : '')) : 'Awaiting citizen distress call'}
                   </div>
                 </div>
 
-                {/* INC-4A21 */}
-                <div
-                  onClick={() => setSelectedIncidentId('INC-4A21')}
-                  style={{
-                    background: selectedIncidentId === 'INC-4A21' ? '#eff6ff' : '#ffffff',
-                    border: selectedIncidentId === 'INC-4A21' ? '1.5px solid #3b82f6' : '1px solid #e2e8f0',
-                    borderRadius: '4px',
-                    padding: '8px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ background: '#ea580c', color: 'white', fontSize: '0.62rem', fontWeight: 800, padding: '1px 5px', borderRadius: '2px' }}>
-                      P2 INC-4A21
-                    </span>
-                    <span style={{ fontSize: '0.6rem', color: '#16a34a', fontWeight: 800 }}>LIVE</span>
+                {!hasInput && (
+                  <div style={{ padding: '20px 8px', textAlign: 'center', color: '#64748b', fontSize: '0.66rem' }}>
+                    No other incidents logged this shift.
                   </div>
-                  <div style={{ fontSize: '0.66rem', color: '#1e293b', marginTop: '2px' }}>
-                    Coded call · abuser present
-                  </div>
-                </div>
-
-                {/* INC-4A20 */}
-                <div
-                  onClick={() => setSelectedIncidentId('INC-4A20')}
-                  style={{
-                    background: selectedIncidentId === 'INC-4A20' ? '#eff6ff' : '#ffffff',
-                    border: selectedIncidentId === 'INC-4A20' ? '1.5px solid #3b82f6' : '1px solid #e2e8f0',
-                    borderRadius: '4px',
-                    padding: '8px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ background: '#d97706', color: 'white', fontSize: '0.62rem', fontWeight: 800, padding: '1px 5px', borderRadius: '2px' }}>
-                      P3 INC-4A20
-                    </span>
-                    <span style={{ fontSize: '0.6rem', color: '#dc2626', fontWeight: 800 }}>DROPPED</span>
-                  </div>
-                  <div style={{ fontSize: '0.66rem', color: '#1e293b', marginTop: '2px' }}>
-                    Hello... [call cut]
-                  </div>
-                </div>
-
-                {/* INC-4A1E */}
-                <div
-                  onClick={() => setSelectedIncidentId('INC-4A1E')}
-                  style={{
-                    background: selectedIncidentId === 'INC-4A1E' ? '#eff6ff' : '#ffffff',
-                    border: selectedIncidentId === 'INC-4A1E' ? '1.5px solid #3b82f6' : '1px solid #e2e8f0',
-                    borderRadius: '4px',
-                    padding: '8px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ background: '#d97706', color: 'white', fontSize: '0.62rem', fontWeight: 800, padding: '1px 5px', borderRadius: '2px' }}>
-                      P3 INC-4A1E
-                    </span>
-                    <span style={{ fontSize: '0.6rem', color: '#64748b', fontWeight: 700 }}>WAITING</span>
-                  </div>
-                  <div style={{ fontSize: '0.66rem', color: '#1e293b', marginTop: '2px' }}>
-                    Stalking · possible repeat
-                  </div>
-                </div>
-
-                {/* INC-4A1F */}
-                <div
-                  onClick={() => setSelectedIncidentId('INC-4A1F')}
-                  style={{
-                    background: selectedIncidentId === 'INC-4A1F' ? '#eff6ff' : '#ffffff',
-                    border: selectedIncidentId === 'INC-4A1F' ? '1.5px solid #3b82f6' : '1px solid #e2e8f0',
-                    borderRadius: '4px',
-                    padding: '8px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ background: '#64748b', color: 'white', fontSize: '0.62rem', fontWeight: 800, padding: '1px 5px', borderRadius: '2px' }}>
-                      P4 INC-4A1F
-                    </span>
-                    <span style={{ fontSize: '0.6rem', color: '#64748b', fontWeight: 700 }}>WAITING</span>
-                  </div>
-                  <div style={{ fontSize: '0.66rem', color: '#1e293b', marginTop: '2px' }}>
-                    Legal help · custody
-                  </div>
-                </div>
+                )}
               </div>
             </aside>
 
-            {/* Col 2: EVENT LOG append-only · 11 entries */}
+            {/* Col 2: EVENT LOG append-only */}
             <main style={{ padding: '12px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <div style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span style={{ fontSize: '0.74rem', fontWeight: 800, color: '#0f172a' }}>EVENT LOG</span>
-                    <span style={{ fontSize: '0.66rem', color: '#64748b' }}>append-only · 11 entries</span>
+                    <span style={{ fontSize: '0.66rem', color: '#64748b' }}>append-only audit trail</span>
                   </div>
                   <div style={{ display: 'flex', gap: '6px', fontSize: '0.66rem', color: '#475569' }}>
                     {(['all', 'caller', 'operator', 'system', 'units'] as const).map((filter) => (
@@ -1528,77 +1478,55 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
                   </div>
                 </div>
 
-                {/* 11 Entries Timeline */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.74rem', lineHeight: 1.45, color: '#1e293b' }}>
+                {/* Dynamic Chronological Timeline */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.74rem', lineHeight: 1.45, color: '#1e293b', minHeight: '140px' }}>
                   <div style={{ display: 'flex', gap: '8px' }}>
-                    <span style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.66rem', width: '54px' }}>09:44:09</span>
+                    <span style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.66rem', width: '54px' }}>00:00:00</span>
                     <span style={{ color: '#64748b', fontWeight: 800, width: '60px' }}>SYSTEM</span>
-                    <span>Answered by OP-03 · Hinglish · transcript on</span>
+                    <span>Operator OP-07 logged in · 181 Women Helpline Delhi CRC Workstation active</span>
                   </div>
 
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <span style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.66rem', width: '54px' }}>09:44:12</span>
-                    <span style={{ color: '#dc2626', fontWeight: 800, width: '60px' }}>CALLER</span>
-                    <span>
-                      Madam mere pati ne <span className="keyword-yellow-tag">chaku</span> nikal liya hai, abhi <span className="keyword-yellow-tag">maar dalega</span>, Shiv Colony gali 4 mein hu, <span className="keyword-yellow-tag">bachche</span> bhi hain
-                    </span>
-                  </div>
+                  {!hasInput ? (
+                    <div style={{ padding: '30px 10px', textAlign: 'center', color: '#64748b', fontStyle: 'italic', background: '#f8fafc', borderRadius: '4px', border: '1px dashed #cbd5e1', marginTop: '6px' }}>
+                      Audit log listening. As calls, transcripts, priority assessments, and unit dispatches occur, they will be appended here deterministically.
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <span style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.66rem', width: '54px' }}>LIVE</span>
+                        <span style={{ color: '#dc2626', fontWeight: 800, width: '60px' }}>CALLER</span>
+                        <span>{rawCallerText}</span>
+                      </div>
 
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <span style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.66rem', width: '54px' }}>09:44:14</span>
-                    <span style={{ color: '#0284c7', fontWeight: 800, width: '60px' }}>SAATHI</span>
-                    <span>
-                      Suggested <span style={{ background: '#dc2626', color: 'white', padding: '1px 4px', borderRadius: '2px', fontWeight: 800, fontSize: '0.62rem' }}>P1</span> · weapon + threat to life + children · police, shelter
-                    </span>
-                  </div>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <span style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.66rem', width: '54px' }}>LIVE</span>
+                        <span style={{ color: '#0284c7', fontWeight: 800, width: '60px' }}>SAATHI</span>
+                        <span>
+                          Classified as{' '}
+                          <strong style={{ color: effectiveUrgency === 'CRITICAL' ? '#dc2626' : '#ea580c' }}>
+                            {effectiveUrgency}
+                          </strong>{' '}
+                          · {triage?.threats?.join(', ') || 'Inbound distress signal detected'}.
+                        </span>
+                      </div>
 
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <span style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.66rem', width: '54px' }}>09:44:31</span>
-                    <span style={{ color: '#2563eb', fontWeight: 800, width: '60px' }}>OP-03</span>
-                    <span>Asked "Kya aapko ya kisi ko chot lagi hai?" — caller: nahi</span>
-                  </div>
+                      {isLocationConfirmed && (
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <span style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.66rem', width: '54px' }}>LIVE</span>
+                          <span style={{ color: '#2563eb', fontWeight: 800, width: '60px' }}>OP-07</span>
+                          <span>Location verified: {extractedLocation || 'Paschim Vihar GPS'}</span>
+                        </div>
+                      )}
 
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <span style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.66rem', width: '54px' }}>09:44:58</span>
-                    <span style={{ color: '#2563eb', fontWeight: 800, width: '60px' }}>OP-03</span>
-                    <span>Location confirmed — Shiv Colony, Gali 4, near the temple</span>
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <span style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.66rem', width: '54px' }}>09:45:20</span>
-                    <span style={{ color: '#dc2626', fontWeight: 800, width: '60px' }}>CALLER</span>
-                    <span>Callback unsafe · SMS safe</span>
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <span style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.66rem', width: '54px' }}>09:45:41</span>
-                    <span style={{ color: '#2563eb', fontWeight: 800, width: '60px' }}>OP-03</span>
-                    <span>Handoff brief approved → Police 112, One Stop Centre</span>
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <span style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.66rem', width: '54px' }}>09:47:02</span>
-                    <span style={{ color: '#2563eb', fontWeight: 800, width: '60px' }}>112</span>
-                    <span>PCR 14 acknowledged · en route</span>
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <span style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.66rem', width: '54px' }}>09:47:30</span>
-                    <span style={{ color: '#16a34a', fontWeight: 800, width: '60px' }}>181 OSC</span>
-                    <span>Sakhi centre holding a bed for 3</span>
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '8px', color: '#c2410c' }}>
-                    <span style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.66rem', width: '54px' }}>09:48:21</span>
-                    <span style={{ fontWeight: 800, width: '60px' }}>SYSTEM</span>
-                    <span>Caller disconnected · safety not confirmed</span>
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <span style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.66rem', width: '54px' }}>09:49:05</span>
-                    <span style={{ color: '#2563eb', fontWeight: 800, width: '60px' }}>OP-03</span>
-                    <span>SMS sent as "181 Info" — case number, how to reach us</span>
-                  </div>
+                      {agencies?.police?.status === 'DISPATCHED' && (
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <span style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.66rem', width: '54px' }}>LIVE</span>
+                          <span style={{ color: '#2563eb', fontWeight: 800, width: '60px' }}>112 PCR</span>
+                          <span>PCR 14 dispatched · ETA ~3 min</span>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               </div>
             </main>
@@ -1616,13 +1544,14 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
                       <span style={{ background: '#2563eb', color: 'white', fontWeight: 900, fontSize: '0.6rem', padding: '1px 5px', borderRadius: '2px' }}>112</span>
                       <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#0f172a' }}>PCR 14 · Paschim Vihar PS</span>
                     </div>
-                    <span style={{ fontSize: '0.68rem', color: '#2563eb', fontWeight: 700 }}>En route</span>
+                    <span style={{ fontSize: '0.68rem', color: agencies?.police?.status === 'DISPATCHED' ? '#2563eb' : '#64748b', fontWeight: 700 }}>
+                      {agencies?.police?.status === 'DISPATCHED' ? 'En route' : 'Standby'}
+                    </span>
                   </div>
-                  {/* Progress steps */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6rem', color: '#64748b', marginTop: '6px' }}>
-                    <span>REQ 09:45</span>
-                    <span>ACK 09:47</span>
-                    <span style={{ color: '#2563eb', fontWeight: 700 }}>ENRT 09:47</span>
+                    <span>REQ {hasInput ? '09:45' : '--:--'}</span>
+                    <span>ACK {agencies?.police?.status === 'DISPATCHED' ? '09:47' : '--:--'}</span>
+                    <span style={{ color: agencies?.police?.status === 'DISPATCHED' ? '#2563eb' : '#64748b', fontWeight: 700 }}>ENRT</span>
                     <span>ONSC —</span>
                   </div>
                 </div>
@@ -1634,12 +1563,13 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
                       <span style={{ background: '#16a34a', color: 'white', fontWeight: 900, fontSize: '0.6rem', padding: '1px 5px', borderRadius: '2px' }}>181</span>
                       <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#0f172a' }}>One Stop Centre · Sakhi</span>
                     </div>
-                    <span style={{ fontSize: '0.68rem', color: '#16a34a', fontWeight: 700 }}>Bed held</span>
+                    <span style={{ fontSize: '0.68rem', color: agencies?.shelter?.status === 'RESERVED' ? '#16a34a' : '#64748b', fontWeight: 700 }}>
+                      {agencies?.shelter?.status === 'RESERVED' ? 'Bed held' : 'Ready'}
+                    </span>
                   </div>
-                  {/* Progress steps */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6rem', color: '#64748b', marginTop: '6px' }}>
-                    <span>REQ 09:45</span>
-                    <span style={{ color: '#16a34a', fontWeight: 700 }}>HELD 09:47</span>
+                    <span>REQ {hasInput ? '09:45' : '--:--'}</span>
+                    <span style={{ color: agencies?.shelter?.status === 'RESERVED' ? '#16a34a' : '#64748b', fontWeight: 700 }}>HELD</span>
                     <span>ARRIVED —</span>
                   </div>
                 </div>
@@ -1654,59 +1584,15 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
                 <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#0f172a' }}>CASE SUMMARY</span>
                 <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr', gap: '3px', fontSize: '0.66rem' }}>
                   <span style={{ color: '#64748b' }}>Threat</span>
-                  <span style={{ color: '#0f172a' }}>Husband with knife · threat to life</span>
+                  <span style={{ color: '#0f172a' }}>{hasInput ? (triage?.threats?.join(', ') || 'Inbound distress') : 'Standby'}</span>
                   <span style={{ color: '#64748b' }}>At risk</span>
-                  <span style={{ color: '#0f172a' }}>Caller, 2 children</span>
+                  <span style={{ color: '#0f172a' }}>{hasInput ? (triage?.childrenAtRisk?.detected ? 'Caller, children' : 'Caller') : 'Standby'}</span>
                   <span style={{ color: '#64748b' }}>Injuries</span>
-                  <span style={{ color: '#0f172a' }}>None reported (asked 09:44)</span>
+                  <span style={{ color: '#0f172a' }}>{injuryEv ? injuryEv.label : 'None reported'}</span>
                   <span style={{ color: '#64748b' }}>Weapon</span>
-                  <span style={{ color: '#dc2626', fontWeight: 700 }}>Knife · in hand</span>
-                </div>
-              </div>
-
-              {/* POSSIBLE REPEAT */}
-              <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#0f172a' }}>POSSIBLE REPEAT</span>
-                  <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#ea580c' }}>0.86</span>
-                </div>
-                <div style={{ fontSize: '0.66rem', color: '#0f172a' }}>
-                  INC-39B7 · 12 Sep · domestic abuse · closed, OSC referral
-                </div>
-                <div style={{ fontSize: '0.62rem', color: '#64748b' }}>
-                  name 0.94 · place 0.88 · phone —
-                </div>
-                <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
-                  <button
-                    onClick={() => alert('Linked incident to prior record INC-39B7.')}
-                    style={{
-                      background: '#ffffff',
-                      border: '1px solid #cbd5e1',
-                      borderRadius: '4px',
-                      padding: '4px 10px',
-                      fontSize: '0.64rem',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      color: '#0f172a'
-                    }}
-                  >
-                    Link after review
-                  </button>
-                  <button
-                    onClick={() => alert('Marked as separate incident.')}
-                    style={{
-                      background: '#ffffff',
-                      border: '1px solid #cbd5e1',
-                      borderRadius: '4px',
-                      padding: '4px 10px',
-                      fontSize: '0.64rem',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      color: '#0f172a'
-                    }}
-                  >
-                    Not same
-                  </button>
+                  <span style={{ color: weaponEv ? '#dc2626' : '#64748b', fontWeight: weaponEv ? 700 : 500 }}>
+                    {weaponEv ? `${weaponEv.quoteHinglish} · detected` : 'None reported'}
+                  </span>
                 </div>
               </div>
 
@@ -1773,58 +1659,61 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
       )}
 
       {/* ======================================================== */}
-      {/* 4. TAB: WALLBOARD VIEW (IMAGE 1)                         */}
+      {/* 4. TAB: WALLBOARD VIEW (FULLY DYNAMIC)                   */}
       {/* ======================================================== */}
       {activeTab === 'wallboard' && (
         <div style={{ flex: 1, overflowY: 'auto', background: '#eaedf2', padding: '14px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          {/* Top 6 KPI Cards Strip with Dividers (Matching Image 1) */}
+          {/* Top 6 KPI Cards Strip */}
           <div className="wallboard-kpis-strip">
             {/* Card 1 */}
             <div className="wallboard-kpi-item">
               <span className="wallboard-kpi-lbl">CALLS WAITING</span>
-              <span className="wallboard-kpi-val">5</span>
-              <span className="wallboard-kpi-sub">1 ringing</span>
+              <span className="wallboard-kpi-val">{hasInput ? 1 : 0}</span>
+              <span className="wallboard-kpi-sub">{hasInput ? '1 active on line' : '0 ringing'}</span>
             </div>
 
-            {/* Card 2: Longest Wait in Red */}
+            {/* Card 2 */}
             <div className="wallboard-kpi-item longest-wait">
-              <span className="wallboard-kpi-lbl" style={{ color: '#dc2626' }}>LONGEST WAIT</span>
-              <span className="wallboard-kpi-val red">08:26</span>
-              <span className="wallboard-kpi-sub">INC-4A20 dropped · no callback</span>
+              <span className="wallboard-kpi-lbl" style={{ color: hasInput ? '#dc2626' : '#64748b' }}>LONGEST WAIT</span>
+              <span className={`wallboard-kpi-val ${hasInput ? 'red' : ''}`}>{hasInput ? formatDuration(callDuration) : '00:00'}</span>
+              <span className="wallboard-kpi-sub">{hasInput ? `${reportCode} active session` : 'No dropped calls'}</span>
             </div>
 
             {/* Card 3 */}
             <div className="wallboard-kpi-item">
               <span className="wallboard-kpi-lbl">OPEN P1 / P2</span>
               <span className="wallboard-kpi-val">
-                <span style={{ color: '#dc2626' }}>1</span> / <span style={{ color: '#ea580c' }}>2</span>
+                <span style={{ color: '#dc2626' }}>{effectiveUrgency === 'CRITICAL' && hasInput ? 1 : 0}</span> /{' '}
+                <span style={{ color: '#ea580c' }}>{effectiveUrgency === 'SEVERE' && hasInput ? 1 : 0}</span>
               </span>
-              <span className="wallboard-kpi-sub" style={{ color: '#ea580c' }}>1 P2 unassigned</span>
+              <span className="wallboard-kpi-sub" style={{ color: hasInput ? '#ea580c' : '#64748b' }}>
+                {hasInput ? (effectiveUrgency === 'CRITICAL' || effectiveUrgency === 'SEVERE' ? 'Assigned OP-07' : 'Routine') : 'Helpline monitoring'}
+              </span>
             </div>
 
             {/* Card 4 */}
             <div className="wallboard-kpi-item">
               <span className="wallboard-kpi-lbl">CODED CALLS</span>
-              <span className="wallboard-kpi-val">2</span>
-              <span className="wallboard-kpi-sub">food order · wrong number</span>
+              <span className="wallboard-kpi-val">{hasInput && !triage?.callerConstraints?.canSpeakFreely ? 1 : 0}</span>
+              <span className="wallboard-kpi-sub">{hasInput && !triage?.callerConstraints?.canSpeakFreely ? 'Duress whisper flagged' : 'None active'}</span>
             </div>
 
-            {/* Card 5: Green */}
+            {/* Card 5 */}
             <div className="wallboard-kpi-item">
               <span className="wallboard-kpi-lbl">FIRST SAFE QUESTION</span>
-              <span className="wallboard-kpi-val green">0:19</span>
-              <span className="wallboard-kpi-sub">median this shift</span>
+              <span className="wallboard-kpi-val green">{hasInput ? '0:08' : '0:00'}</span>
+              <span className="wallboard-kpi-sub">{hasInput ? 'generated this session' : 'median shift baseline'}</span>
             </div>
 
             {/* Card 6 */}
             <div className="wallboard-kpi-item">
               <span className="wallboard-kpi-lbl">OPERATORS</span>
-              <span className="wallboard-kpi-val">6 / 8</span>
-              <span className="wallboard-kpi-sub">2 available</span>
+              <span className="wallboard-kpi-val">{hasInput ? '1 / 8' : '0 / 8'}</span>
+              <span className="wallboard-kpi-sub">{hasInput ? 'OP-07 on call · 7 available' : '8 available on floor'}</span>
             </div>
           </div>
 
-          {/* Two-Column Main Content (Left 62%, Right 38%) */}
+          {/* Two-Column Main Content */}
           <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: '14px' }}>
             {/* Left Column: Urgent Calls Table & Stacked Chart */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -1833,53 +1722,51 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
                 <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#0f172a', marginBottom: '8px' }}>
                   OPEN URGENT CALLS
                 </div>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.68rem' }}>
-                  <thead>
-                    <tr style={{ color: '#64748b', textAlign: 'left', borderBottom: '1px solid #e2e8f0' }}>
-                      <th style={{ padding: '6px 4px', width: '36px' }}>PRI</th>
-                      <th style={{ padding: '6px 4px' }}>INCIDENT</th>
-                      <th style={{ padding: '6px 4px' }}>TYPE</th>
-                      <th style={{ padding: '6px 4px' }}>OPERATOR</th>
-                      <th style={{ padding: '6px 4px' }}>AGE</th>
-                      <th style={{ padding: '6px 4px' }}>UNITS</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '8px 4px' }}>
-                        <span style={{ background: '#dc2626', color: 'white', padding: '1px 5px', borderRadius: '2px', fontWeight: 800 }}>P1</span>
-                      </td>
-                      <td style={{ fontWeight: 700, color: '#0f172a' }}>INC-4A1C</td>
-                      <td>Assault with weapon · children</td>
-                      <td>OP-03</td>
-                      <td style={{ fontFamily: 'monospace' }}>04:12</td>
-                      <td style={{ color: '#2563eb', fontWeight: 600 }}>112 en route · ack 09:47</td>
-                    </tr>
-                    <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '8px 4px' }}>
-                        <span style={{ background: '#ea580c', color: 'white', padding: '1px 5px', borderRadius: '2px', fontWeight: 800 }}>P2</span>
-                      </td>
-                      <td style={{ fontWeight: 700, color: '#0f172a' }}>INC-4A21</td>
-                      <td>DV · coded call · abuser present</td>
-                      <td>OP-07</td>
-                      <td style={{ fontFamily: 'monospace' }}>02:59</td>
-                      <td style={{ color: '#64748b' }}>Not requested</td>
-                    </tr>
-                    <tr>
-                      <td style={{ padding: '8px 4px' }}>
-                        <span style={{ background: '#ea580c', color: 'white', padding: '1px 5px', borderRadius: '2px', fontWeight: 800 }}>P2</span>
-                      </td>
-                      <td style={{ fontWeight: 700, color: '#0f172a' }}>INC-4A1D</td>
-                      <td>Coded call · "pizza order"</td>
-                      <td style={{ color: '#ea580c', fontWeight: 800 }}>UNASSIGNED</td>
-                      <td style={{ fontFamily: 'monospace' }}>00:42</td>
-                      <td style={{ color: '#64748b' }}>—</td>
-                    </tr>
-                  </tbody>
-                </table>
+                {hasInput && (effectiveUrgency === 'CRITICAL' || effectiveUrgency === 'SEVERE') ? (
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.68rem' }}>
+                    <thead>
+                      <tr style={{ color: '#64748b', textAlign: 'left', borderBottom: '1px solid #e2e8f0' }}>
+                        <th style={{ padding: '6px 4px', width: '36px' }}>PRI</th>
+                        <th style={{ padding: '6px 4px' }}>INCIDENT</th>
+                        <th style={{ padding: '6px 4px' }}>TYPE</th>
+                        <th style={{ padding: '6px 4px' }}>OPERATOR</th>
+                        <th style={{ padding: '6px 4px' }}>AGE</th>
+                        <th style={{ padding: '6px 4px' }}>UNITS</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td style={{ padding: '8px 4px' }}>
+                          <span
+                            style={{
+                              background: effectiveUrgency === 'CRITICAL' ? '#dc2626' : '#ea580c',
+                              color: 'white',
+                              padding: '1px 5px',
+                              borderRadius: '2px',
+                              fontWeight: 800
+                            }}
+                          >
+                            {effectiveUrgency === 'CRITICAL' ? 'P1' : 'P2'}
+                          </span>
+                        </td>
+                        <td style={{ fontWeight: 700, color: '#0f172a' }}>{reportCode}</td>
+                        <td>{triage?.threats?.join(', ') || 'Inbound Distress'}</td>
+                        <td>OP-07</td>
+                        <td style={{ fontFamily: 'monospace' }}>{formatDuration(callDuration)}</td>
+                        <td style={{ color: agencies?.police?.status === 'DISPATCHED' ? '#2563eb' : '#64748b', fontWeight: 600 }}>
+                          {agencies?.police?.status === 'DISPATCHED' ? '112 en route' : 'Assessing'}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                ) : (
+                  <div style={{ padding: '24px 10px', textAlign: 'center', color: '#64748b', fontSize: '0.68rem', fontStyle: 'italic' }}>
+                    No active urgent distress calls currently open. Helplines monitoring on standby.
+                  </div>
+                )}
               </div>
 
-              {/* CALLS PER HOUR · BY PRIORITY (Stacked Chart Matching Image 1) */}
+              {/* CALLS PER HOUR BY PRIORITY */}
               <div style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '14px', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
                   <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#0f172a' }}>
@@ -1896,22 +1783,22 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
                 {/* Stacked Chart Graphic */}
                 <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', height: '170px', borderBottom: '1px solid #cbd5e1', paddingBottom: '4px' }}>
                   {[
-                    { time: '04:00', total: 4, p1: 18, p2: 18, p3: 20, p4: 18 },
-                    { time: '05:00', total: 6, p1: 22, p2: 38, p3: 28, p4: 20 },
-                    { time: '06:00', total: 6, p1: 20, p2: 24, p3: 50, p4: 22 },
-                    { time: '07:00', total: 9, p1: 42, p2: 50, p3: 40, p4: 18 },
-                    { time: '08:00', total: 8, p1: 34, p2: 44, p3: 36, p4: 20 },
-                    { time: '09:00 ►', total: 5, p1: 20, p2: 36, p3: 22, p4: 18 }
+                    { time: '04:00', total: 0, p1: 0, p2: 0, p3: 0, p4: 0 },
+                    { time: '05:00', total: 0, p1: 0, p2: 0, p3: 0, p4: 0 },
+                    { time: '06:00', total: 0, p1: 0, p2: 0, p3: 0, p4: 0 },
+                    { time: '07:00', total: 0, p1: 0, p2: 0, p3: 0, p4: 0 },
+                    { time: '08:00', total: 0, p1: 0, p2: 0, p3: 0, p4: 0 },
+                    { time: 'LIVE ►', total: hasInput ? 1 : 0, p1: effectiveUrgency === 'CRITICAL' && hasInput ? 30 : 0, p2: effectiveUrgency === 'SEVERE' && hasInput ? 30 : 0, p3: effectiveUrgency === 'MODERATE' && hasInput ? 30 : 0, p4: effectiveUrgency === 'LOW' && hasInput ? 30 : 0 }
                   ].map((bar, idx) => (
                     <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '56px' }}>
                       <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748b', marginBottom: '4px' }}>
                         {bar.total}
                       </span>
-                      <div style={{ width: '42px', display: 'flex', flexDirection: 'column-reverse' }}>
+                      <div style={{ width: '42px', height: '100px', display: 'flex', flexDirection: 'column-reverse', background: '#f8fafc', borderRadius: '3px 3px 0 0', overflow: 'hidden' }}>
                         <div style={{ height: `${bar.p1}px`, background: '#dc2626' }} />
                         <div style={{ height: `${bar.p2}px`, background: '#ea580c' }} />
                         <div style={{ height: `${bar.p3}px`, background: '#f59e0b' }} />
-                        <div style={{ height: `${bar.p4}px`, background: '#94a3b8', borderRadius: '3px 3px 0 0' }} />
+                        <div style={{ height: `${bar.p4}px`, background: '#94a3b8' }} />
                       </div>
                       <span style={{ fontSize: '0.64rem', color: '#64748b', marginTop: '6px', whiteSpace: 'nowrap' }}>
                         {bar.time}
@@ -1924,110 +1811,32 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
 
             {/* Right Column: Needs Supervisor & Operators Status */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              {/* NEEDS SUPERVISOR · 3 (Matching Image 1) */}
+              {/* NEEDS SUPERVISOR */}
               <div style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
                 <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#0f172a', marginBottom: '10px' }}>
-                  NEEDS SUPERVISOR · 3
+                  NEEDS SUPERVISOR
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {/* Alert 1: DROPPED */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr auto', gap: '8px', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '10px' }}>
-                    <span style={{ color: '#dc2626', fontWeight: 900, fontSize: '0.68rem' }}>DROPPED</span>
-                    <div>
-                      <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#0f172a' }}>
-                        INC-4A20 cut after "Hello... hello..."
-                      </div>
-                      <div style={{ fontSize: '0.64rem', color: '#64748b', marginTop: '2px' }}>
-                        No callback in 8 min · callback safety unknown — send SMS check first.
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => alert('Assigned INC-4A20 to OP-01.')}
-                      style={{
-                        background: '#0f172a',
-                        border: 'none',
-                        color: 'white',
-                        padding: '5px 10px',
-                        borderRadius: '3px',
-                        fontSize: '0.66rem',
-                        fontWeight: 800,
-                        cursor: 'pointer',
-                        whiteSpace: 'nowrap'
-                      }}
-                    >
-                      Assign OP-01
-                    </button>
-                  </div>
-
-                  {/* Alert 2: OVERRIDE */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr auto', gap: '8px', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '10px' }}>
-                    <span style={{ color: '#ea580c', fontWeight: 900, fontSize: '0.68rem' }}>OVERRIDE</span>
-                    <div>
-                      <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#0f172a' }}>
-                        INC-4A17 set to P3 below floor
-                      </div>
-                      <div style={{ fontSize: '0.64rem', color: '#64748b', marginTop: '2px' }}>
-                        "Chaku" set a minimum of P2. Operator reason: "caller said it was a kitchen knife".
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => alert('Reviewing override rationale for INC-4A17.')}
-                      style={{
-                        background: '#ffffff',
-                        border: '1px solid #cbd5e1',
-                        color: '#0f172a',
-                        padding: '4px 12px',
-                        borderRadius: '3px',
-                        fontSize: '0.66rem',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        whiteSpace: 'nowrap'
-                      }}
-                    >
-                      Review
-                    </button>
-                  </div>
-
-                  {/* Alert 3: REPEAT? */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr auto', gap: '8px', alignItems: 'center' }}>
-                    <span style={{ color: '#2563eb', fontWeight: 900, fontSize: '0.68rem' }}>REPEAT?</span>
-                    <div>
-                      <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#0f172a' }}>
-                        INC-4A1E may match INC-3F02
-                      </div>
-                      <div style={{ fontSize: '0.64rem', color: '#64748b', marginTop: '2px' }}>
-                        Name and place match · 0.82. Check before linking.
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => alert('Comparing INC-4A1E with INC-3F02.')}
-                      style={{
-                        background: '#ffffff',
-                        border: '1px solid #cbd5e1',
-                        color: '#0f172a',
-                        padding: '4px 10px',
-                        borderRadius: '3px',
-                        fontSize: '0.66rem',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        whiteSpace: 'nowrap'
-                      }}
-                    >
-                      Compare
-                    </button>
-                  </div>
+                <div style={{ padding: '16px 8px', textAlign: 'center', color: '#16a34a', fontSize: '0.68rem', fontWeight: 700, background: '#f0fdf4', borderRadius: '4px', border: '1px solid #bbf7d0' }}>
+                  ✓ All active emergency triage operations within normal supervision thresholds. No dropped calls or policy overrides detected.
                 </div>
               </div>
 
-              {/* OPERATORS STATUS (Matching Image 1) */}
+              {/* OPERATORS STATUS */}
               <div style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#0f172a' }}>OPERATORS</span>
-                  <span style={{ fontSize: '0.64rem', color: '#64748b' }}>6 busy · 2 free</span>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#0f172a' }}>OPERATORS ON FLOOR</span>
+                  <span style={{ fontSize: '0.64rem', color: '#64748b' }}>{hasInput ? '1 busy · 7 free' : '0 busy · 8 free'}</span>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', fontSize: '0.68rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid #f8fafc' }}>
+                    <span style={{ fontWeight: 700, width: '50px' }}>OP-07</span>
+                    <span style={{ color: hasInput ? '#ea580c' : '#16a34a', fontWeight: 700 }}>
+                      {hasInput ? `On call · ${reportCode}` : 'Available (Your line)'}
+                    </span>
+                    <span style={{ fontFamily: 'monospace' }}>{hasInput ? formatDuration(callDuration) : '—'}</span>
+                  </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid #f8fafc' }}>
                     <span style={{ fontWeight: 700, width: '50px' }}>OP-01</span>
                     <span style={{ color: '#16a34a', fontWeight: 700 }}>Available</span>
@@ -2035,33 +1844,28 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid #f8fafc' }}>
                     <span style={{ fontWeight: 700, width: '50px' }}>OP-02</span>
-                    <span>On call · <span style={{ color: '#d97706', fontWeight: 800 }}>P3</span> INC-4A1B</span>
-                    <span style={{ fontFamily: 'monospace' }}>05:10</span>
+                    <span style={{ color: '#16a34a', fontWeight: 700 }}>Available</span>
+                    <span style={{ color: '#64748b' }}>—</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid #f8fafc' }}>
                     <span style={{ fontWeight: 700, width: '50px' }}>OP-03</span>
-                    <span>Wrap-up · <span style={{ color: '#dc2626', fontWeight: 800 }}>P1</span> INC-4A1C</span>
-                    <span style={{ fontFamily: 'monospace' }}>04:12</span>
+                    <span style={{ color: '#16a34a', fontWeight: 700 }}>Available</span>
+                    <span style={{ color: '#64748b' }}>—</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid #f8fafc' }}>
                     <span style={{ fontWeight: 700, width: '50px' }}>OP-04</span>
-                    <span>On call · <span style={{ color: '#64748b', fontWeight: 800 }}>P4</span> INC-4A1F</span>
-                    <span style={{ fontFamily: 'monospace' }}>06:29</span>
+                    <span style={{ color: '#16a34a', fontWeight: 700 }}>Available</span>
+                    <span style={{ color: '#64748b' }}>—</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid #f8fafc' }}>
                     <span style={{ fontWeight: 700, width: '50px' }}>OP-05</span>
-                    <span>Notes</span>
-                    <span style={{ fontFamily: 'monospace' }}>01:40</span>
+                    <span style={{ color: '#16a34a', fontWeight: 700 }}>Available</span>
+                    <span style={{ color: '#64748b' }}>—</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid #f8fafc' }}>
                     <span style={{ fontWeight: 700, width: '50px' }}>OP-06</span>
-                    <span>On call · <span style={{ color: '#d97706', fontWeight: 800 }}>P3</span> INC-4A1E</span>
-                    <span style={{ fontFamily: 'monospace' }}>03:33</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid #f8fafc' }}>
-                    <span style={{ fontWeight: 700, width: '50px' }}>OP-07</span>
-                    <span>On call · <span style={{ color: '#ea580c', fontWeight: 800 }}>P2</span> INC-4A21</span>
-                    <span style={{ fontFamily: 'monospace' }}>02:59</span>
+                    <span style={{ color: '#16a34a', fontWeight: 700 }}>Available</span>
+                    <span style={{ color: '#64748b' }}>—</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}>
                     <span style={{ fontWeight: 700, width: '50px' }}>OP-08</span>
@@ -2085,11 +1889,11 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
             <div className="stresslab-twists-col">
               <div>
                 <div style={{ fontSize: '0.66rem', fontWeight: 800, color: '#475569', letterSpacing: '0.04em' }}>BASE CALL</div>
-                <div style={{ fontSize: '0.78rem', color: '#0f172a', fontWeight: 700, marginTop: '4px' }}>
-                  “Pati se jhagda ho gaya hai, ghar mein tanav hai, Rampur gaon”
+                <div style={{ fontSize: '0.78rem', color: hasInput ? '#0f172a' : '#64748b', fontWeight: 700, marginTop: '4px', fontStyle: hasInput ? 'normal' : 'italic' }}>
+                  {hasInput ? `"${rawCallerText}"` : 'Awaiting live caller transmission from phone...'}
                 </div>
-                <div style={{ display: 'inline-block', background: '#ffedd5', color: '#c2410c', border: '1px solid #fed7aa', padding: '2px 8px', borderRadius: '4px', fontSize: '0.64rem', fontWeight: 700, marginTop: '4px' }}>
-                  P3 Medium · domestic setting
+                <div style={{ display: 'inline-block', background: hasInput ? '#ffedd5' : '#f1f5f9', color: hasInput ? '#c2410c' : '#64748b', border: `1px solid ${hasInput ? '#fed7aa' : '#cbd5e1'}`, padding: '2px 8px', borderRadius: '4px', fontSize: '0.64rem', fontWeight: 700, marginTop: '4px' }}>
+                  {hasInput ? `${effectiveUrgency} · active distress` : 'Standby · No distress loaded'}
                 </div>
               </div>
 

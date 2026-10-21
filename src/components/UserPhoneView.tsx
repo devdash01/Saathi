@@ -2036,7 +2036,7 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
                   </button>
                 </div>
 
-                <div className="case-id-yellow-large">{activeReport?.id || 'INC-4A21'}</div>
+                <div className="case-id-yellow-large">{activeReport?.id || 'SA-2024-LIVE'}</div>
                 <div style={{ fontSize: '0.72rem', color: '#94a3b8', lineHeight: 1.35 }}>
                   If the call drops, call 181 and say this number. The operator sees everything you already told us.
                 </div>
