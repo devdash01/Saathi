@@ -176,3 +176,37 @@ export interface IncidentRecord {
   safetyFloorTriggered: boolean;
   continuityNotes: string;
 }
+
+export type ContactRelationship =
+  | 'Parent'
+  | 'Spouse'
+  | 'Sibling'
+  | 'Child'
+  | 'Friend'
+  | 'Relative'
+  | 'Guardian'
+  | 'Colleague'
+  | 'Other';
+
+export interface EmergencyContact {
+  id: string;
+  name: string;
+  phone: string;
+  relationship: ContactRelationship;
+  notifySms: boolean;
+  notifyWhatsapp: boolean;
+  isPrimary?: boolean;
+  createdAt: string;
+}
+
+export interface ContactNotificationLog {
+  id: string;
+  contactId: string;
+  contactName: string;
+  phone: string;
+  channel: 'sms' | 'whatsapp';
+  sentAt: string;
+  status: 'prepared' | 'opened' | 'dispatched';
+  messageSnippet: string;
+}
+

@@ -1,4 +1,12 @@
-import type { UrgencyLevel, StructuredTriage, SafetyFloor, SafeSignalQuestion, AgencyDispatchState } from './index';
+import type {
+  UrgencyLevel,
+  StructuredTriage,
+  SafetyFloor,
+  SafeSignalQuestion,
+  AgencyDispatchState,
+  EmergencyContact,
+  ContactNotificationLog
+} from './index';
 
 export type ReportLifecycleState =
   | 'draft'
@@ -82,6 +90,8 @@ export interface EmergencyReport {
   agencies: AgencyDispatchState;
   questions: SafeSignalQuestion[];
   auditTrail: AuditEvent[];
+  emergencyContacts?: EmergencyContact[];
+  contactNotifications?: ContactNotificationLog[];
   retryCount: number;
   isDuplicate?: boolean;
   duplicateOfId?: string;

@@ -7,13 +7,15 @@ import {
   X,
   Radio,
   Clock,
-  ExternalLink
+  ExternalLink,
+  Users
 } from 'lucide-react';
 import {
   VERIFIED_INDIAN_HELPLINES,
   OFFLINE_LIFE_SAFETY_INSTRUCTIONS,
   generateEmergencySmsLink
 } from '../services/emergencyFallbackService';
+import { emergencyContactService } from '../services/emergencyContactService';
 
 interface EmergencyHelpModalProps {
   isOpen: boolean;
@@ -28,8 +30,9 @@ export const EmergencyHelpModal: React.FC<EmergencyHelpModalProps> = ({
   currentSituation,
   currentLocation
 }) => {
-  const [activeTab, setActiveTab] = useState<'call' | 'sms' | 'helplines' | 'offline'>('call');
+  const [activeTab, setActiveTab] = useState<'call' | 'sms' | 'contact' | 'helplines' | 'offline'>('call');
   const [smsConfirmed, setSmsConfirmed] = useState(false);
+  const contacts = emergencyContactService.getContacts();
 
   if (!isOpen) return null;
 
@@ -84,6 +87,13 @@ export const EmergencyHelpModal: React.FC<EmergencyHelpModalProps> = ({
           >
             <MessageSquare size={13} />
             <span>2. SMS 112</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('contact')}
+            className={`emergency-tab-btn ${activeTab === 'contact' ? 'active' : ''}`}
+          >
+            <Users size={13} />
+            <span>Contacts</span>
           </button>
           <button
             onClick={() => setActiveTab('helplines')}
@@ -159,6 +169,97 @@ export const EmergencyHelpModal: React.FC<EmergencyHelpModalProps> = ({
                   <span>
                     ✓ Handoff opened. Please verify that your SMS app dispatched the text.
                   </span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Tab 2.5: Personal Emergency Contacts SOS */}
+        {activeTab === 'contact' && (
+          <div className="emergency-tab-body">
+            <div className="emergency-sms-card">
+              <div className="sms-card-title">Personal Emergency Contacts SOS</div>
+              <p className="sms-card-sub">
+                Send prefilled SOS distress message with your location to your personal emergency contact via SMS or WhatsApp even offline.
+              </p>
+
+              {contacts.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', margin: '10px 0' }}>
+                  {contacts.map((c) => {
+                    const smsPayload = `EMERGENCY ALERT: I need immediate assistance.\nSituation: ${currentSituation || 'Emergency distress'}\nLocation: ${currentLocation || 'Unknown'}\nPlease reach out or coordinate with 112 ERSS.`;
+                    const cleanPhone = emergencyContactService.getCleanPhoneForSms(c.phone);
+                    const waPhone = emergencyContactService.getCleanPhoneForWhatsApp(c.phone);
+                    const smsLink = `sms:${cleanPhone}?body=${encodeURIComponent(smsPayload)}`;
+                    const waLink = `https://wa.me/${waPhone}?text=${encodeURIComponent(smsPayload)}`;
+
+                    return (
+                      <div
+                        key={c.id}
+                        style={{
+                          background: '#ffffff',
+                          border: '1px solid #cbd5e1',
+                          borderRadius: '8px',
+                          padding: '10px',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center'
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontWeight: 800, fontSize: '0.8rem', color: '#0f172a' }}>
+                            {c.name} <span style={{ fontSize: '0.66rem', color: '#64748b' }}>({c.relationship})</span>
+                          </div>
+                          <div style={{ fontSize: '0.68rem', color: '#475569' }}>{c.phone}</div>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <a
+                            href={waLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              background: '#25D366',
+                              color: '#ffffff',
+                              padding: '6px 10px',
+                              borderRadius: '6px',
+                              fontSize: '0.68rem',
+                              fontWeight: 800,
+                              textDecoration: 'none',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                          >
+                            <MessageSquare size={12} />
+                            <span>WhatsApp</span>
+                          </a>
+                          <a
+                            href={smsLink}
+                            style={{
+                              background: '#0284c7',
+                              color: '#ffffff',
+                              padding: '6px 10px',
+                              borderRadius: '6px',
+                              fontSize: '0.68rem',
+                              fontWeight: 800,
+                              textDecoration: 'none',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                          >
+                            <PhoneCall size={12} />
+                            <span>SMS</span>
+                          </a>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div style={{ padding: '16px', textAlign: 'center', color: '#64748b', fontSize: '0.74rem' }}>
+                  No emergency contacts configured.
                 </div>
               )}
             </div>

@@ -12,13 +12,16 @@ import {
   Keyboard,
   PhoneOff,
   MapPin,
-  Radio
+  Radio,
+  Users
 } from 'lucide-react';
 import { speechService, cleanDuplicateSpeech, assembleSpeechResults } from '../services/speechRecognitionService';
 import { TacticalEmergencyMap } from './TacticalEmergencyMap';
 import { deviceLocationService } from '../services/deviceLocationService';
+import { emergencyContactService } from '../services/emergencyContactService';
+import { EmergencyContactModal } from './EmergencyContactModal';
 import type { EmergencyServiceEntity } from '../services/locationService';
-import type { SafeSignalQuestion, AgencyDispatchState } from '../types';
+import type { SafeSignalQuestion, AgencyDispatchState, EmergencyContact } from '../types';
 import type { EmergencyReport } from '../types/report';
 
 export type CitizenScreenName = 'landing' | 'call' | 'chat' | 'confirm' | 'case';
@@ -98,6 +101,19 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
   // Page 5 Safety reach options
   const [callbackSafe, setCallbackSafe] = useState<boolean>(false);
   const [smsSafe, setSmsSafe] = useState<boolean>(true);
+
+  // Emergency Contact SOS Modal State
+  const [isContactModalOpen, setIsContactModalOpen] = useState(false);
+  const [emergencyContacts, setEmergencyContacts] = useState<EmergencyContact[]>(() =>
+    emergencyContactService.getContacts()
+  );
+
+  useEffect(() => {
+    const unsub = emergencyContactService.subscribe((list) => {
+      setEmergencyContacts(list);
+    });
+    return unsub;
+  }, []);
 
   // Disguise / Quick Exit
   const [isQuickExited, setIsQuickExited] = useState(false);
@@ -562,6 +578,26 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
                     <span className="citizen-brand-tag">SAATHI 181</span>
                   </div>
                   <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                    <button
+                      onClick={() => setIsContactModalOpen(true)}
+                      title="Manage Emergency Contacts & WhatsApp/SMS Alerts"
+                      style={{
+                        background: emergencyContacts.length > 0 ? '#ecfdf5' : '#eff6ff',
+                        border: emergencyContacts.length > 0 ? '1px solid #a7f3d0' : '1px solid #bfdbfe',
+                        color: emergencyContacts.length > 0 ? '#047857' : '#1d4ed8',
+                        borderRadius: '6px',
+                        padding: '3px 7px',
+                        fontSize: '0.62rem',
+                        fontWeight: 800,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <Users size={11} />
+                      <span>Contacts ({emergencyContacts.length})</span>
+                    </button>
                     {(transcript || messages.length > 0) && (
                       <button
                         onClick={handleStartNewSessionClick}
@@ -797,7 +833,153 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
                   </div>
                 </div>
 
-                {/* GOOD TO KNOW */}
+                {/* 4. Emergency Contacts & WhatsApp/SMS SOS Card */}
+                <div
+                  style={{
+                    background: '#ffffff',
+                    border: '1.5px solid #3b82f6',
+                    borderRadius: '12px',
+                    padding: '12px 14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px',
+                    boxShadow: '0 2px 8px rgba(37,99,235,0.08)'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div
+                        style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: '8px',
+                          background: '#dbeafe',
+                          color: '#1d4ed8',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                      >
+                        <Users size={16} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.84rem', fontWeight: 800, color: '#0f172a' }}>
+                          Emergency Contacts ({emergencyContacts.length})
+                        </div>
+                        <div style={{ fontSize: '0.66rem', color: '#64748b' }}>
+                          Auto-mirrors operator details via WhatsApp &amp; SMS
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setIsContactModalOpen(true)}
+                      style={{
+                        background: '#eff6ff',
+                        color: '#1d4ed8',
+                        border: '1px solid #bfdbfe',
+                        borderRadius: '6px',
+                        padding: '4px 8px',
+                        fontSize: '0.66rem',
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Configure →
+                    </button>
+                  </div>
+
+                  {emergencyContacts.length > 0 ? (
+                    <div
+                      style={{
+                        background: '#f8fafc',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '8px',
+                        padding: '8px 10px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between'
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: '0.74rem', fontWeight: 700, color: '#1e293b' }}>
+                          {emergencyContacts[0].name}{' '}
+                          <span style={{ fontSize: '0.64rem', color: '#64748b', fontWeight: 500 }}>
+                            ({emergencyContacts[0].relationship})
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '0.66rem', color: '#059669', fontWeight: 600 }}>
+                          {emergencyContacts[0].phone} • Ready for 1-Tap SOS
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        <button
+                          onClick={() => {
+                            if (activeReport) {
+                              emergencyContactService.dispatchAlert(emergencyContacts[0], activeReport, 'whatsapp');
+                            } else {
+                              setIsContactModalOpen(true);
+                            }
+                          }}
+                          title="Send WhatsApp SOS"
+                          style={{
+                            background: '#25D366',
+                            color: '#ffffff',
+                            border: 'none',
+                            borderRadius: '6px',
+                            padding: '4px 7px',
+                            fontSize: '0.64rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '3px'
+                          }}
+                        >
+                          <MessageSquare size={11} />
+                          <span>WhatsApp</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (activeReport) {
+                              emergencyContactService.dispatchAlert(emergencyContacts[0], activeReport, 'sms');
+                            } else {
+                              setIsContactModalOpen(true);
+                            }
+                          }}
+                          title="Send SMS SOS"
+                          style={{
+                            background: '#0284c7',
+                            color: '#ffffff',
+                            border: 'none',
+                            borderRadius: '6px',
+                            padding: '4px 7px',
+                            fontSize: '0.64rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '3px'
+                          }}
+                        >
+                          <Phone size={11} />
+                          <span>SMS</span>
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: '0.68rem', color: '#64748b' }}>
+                      No contact added yet.{' '}
+                      <button
+                        onClick={() => setIsContactModalOpen(true)}
+                        style={{ background: 'none', border: 'none', color: '#2563eb', fontWeight: 700, cursor: 'pointer', padding: 0 }}
+                      >
+                        + Add a trusted contact
+                      </button>{' '}
+                      to receive live emergency alerts.
+                    </div>
+                  )}
+                </div>
                 <div className="good-to-know-section">
                   <div className="good-to-know-heading">GOOD TO KNOW</div>
                   <div className="good-to-know-item">
@@ -1322,6 +1504,97 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
                   </div>
                 </div>
 
+                {/* Live Emergency Contact Alert Strip */}
+                {emergencyContacts.length > 0 && (
+                  <div
+                    style={{
+                      background: '#ffffff',
+                      border: '1.5px solid #2563eb',
+                      borderRadius: '10px',
+                      padding: '8px 10px',
+                      margin: '6px 0',
+                      boxShadow: '0 2px 6px rgba(37,99,235,0.08)'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <Users size={12} color="#2563eb" />
+                        <span style={{ fontSize: '0.66rem', fontWeight: 800, color: '#1e40af', letterSpacing: '0.03em' }}>
+                          MIRROR TO EMERGENCY CONTACT
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => setIsContactModalOpen(true)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#2563eb',
+                          fontSize: '0.62rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          padding: 0
+                        }}
+                      >
+                        Manage ({emergencyContacts.length}) →
+                      </button>
+                    </div>
+                    <div style={{ fontSize: '0.68rem', color: '#334155', marginBottom: '6px' }}>
+                      Send live GPS, transcript &amp; Police 112 status to{' '}
+                      <strong>{emergencyContacts[0]?.name}</strong> ({emergencyContacts[0]?.relationship}):
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                      <button
+                        onClick={() => {
+                          if (emergencyContacts[0] && activeReport) {
+                            emergencyContactService.dispatchAlert(emergencyContacts[0], activeReport, 'whatsapp');
+                          }
+                        }}
+                        style={{
+                          background: '#25D366',
+                          color: '#ffffff',
+                          border: 'none',
+                          borderRadius: '6px',
+                          padding: '5px 8px',
+                          fontSize: '0.68rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        <MessageSquare size={12} />
+                        <span>WhatsApp Alert</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (emergencyContacts[0] && activeReport) {
+                            emergencyContactService.dispatchAlert(emergencyContacts[0], activeReport, 'sms');
+                          }
+                        }}
+                        style={{
+                          background: '#0284c7',
+                          color: '#ffffff',
+                          border: 'none',
+                          borderRadius: '6px',
+                          padding: '5px 8px',
+                          fontSize: '0.68rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        <Phone size={12} />
+                        <span>SMS Alert</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {/* Link to Proceed to Confirmation */}
                 <div style={{ textAlign: 'center', margin: '6px 0' }}>
                   <button
@@ -1527,6 +1800,21 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
                     />
                   </div>
 
+                  <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '8px', padding: '8px 10px', fontSize: '0.68rem', color: '#166534', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '6px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Users size={13} color="#16a34a" />
+                      <span>
+                        <strong>Emergency Contact Alert:</strong> {emergencyContacts[0]?.name || 'Rahul Sharma'} ({emergencyContacts[0]?.phone || '+91 98765 43210'}) will be mirrored via WhatsApp &amp; SMS.
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => setIsContactModalOpen(true)}
+                      style={{ background: 'none', border: 'none', color: '#15803d', fontSize: '0.62rem', fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}
+                    >
+                      Change →
+                    </button>
+                  </div>
+
                   <button
                     onClick={handleShareLiveLocation}
                     disabled={isLocatingGps}
@@ -1683,6 +1971,108 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
                   </div>
                 </div>
 
+                {/* EMERGENCY CONTACTS NOTIFIED (WHATSAPP & SMS) */}
+                <div className="reach-safely-card" style={{ border: '1.5px solid #3b82f6' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                    <div style={{ fontSize: '0.68rem', fontWeight: 800, letterSpacing: '0.05em', color: '#1e40af', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <Users size={13} color="#2563eb" />
+                      <span>EMERGENCY CONTACTS (WHATSAPP &amp; SMS)</span>
+                    </div>
+                    <button
+                      onClick={() => setIsContactModalOpen(true)}
+                      style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: '0.62rem', fontWeight: 700, cursor: 'pointer' }}
+                    >
+                      Manage ({emergencyContacts.length}) →
+                    </button>
+                  </div>
+
+                  {emergencyContacts.length > 0 ? (
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                        <div>
+                          <div style={{ fontSize: '0.76rem', fontWeight: 700, color: '#0f172a' }}>
+                            {emergencyContacts[0].name} <span style={{ fontSize: '0.64rem', color: '#64748b' }}>({emergencyContacts[0].relationship})</span>
+                          </div>
+                          <div style={{ fontSize: '0.66rem', color: '#059669', fontWeight: 600 }}>
+                            {emergencyContacts[0].phone}
+                          </div>
+                        </div>
+                        <span style={{ fontSize: '0.58rem', background: '#dcfce7', color: '#15803d', padding: '2px 6px', borderRadius: '4px', fontWeight: 800 }}>
+                          Mirrored to Operator CAD
+                        </span>
+                      </div>
+
+                      <div style={{ fontSize: '0.66rem', color: '#475569', lineHeight: 1.35, marginBottom: '8px' }}>
+                        Incident #{activeReport?.id || 'INC-181'}, live GPS coordinates, and Police 112 ETA are formatted for 1-tap dispatch:
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                        <button
+                          onClick={() => {
+                            if (emergencyContacts[0] && activeReport) {
+                              emergencyContactService.dispatchAlert(emergencyContacts[0], activeReport, 'whatsapp');
+                            }
+                          }}
+                          style={{
+                            background: '#25D366',
+                            color: '#ffffff',
+                            border: 'none',
+                            borderRadius: '6px',
+                            padding: '6px 8px',
+                            fontSize: '0.68rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '4px',
+                            boxShadow: '0 2px 6px rgba(37,211,102,0.25)'
+                          }}
+                        >
+                          <MessageSquare size={12} />
+                          <span>Dispatch via WhatsApp</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (emergencyContacts[0] && activeReport) {
+                              emergencyContactService.dispatchAlert(emergencyContacts[0], activeReport, 'sms');
+                            }
+                          }}
+                          style={{
+                            background: '#0284c7',
+                            color: '#ffffff',
+                            border: 'none',
+                            borderRadius: '6px',
+                            padding: '6px 8px',
+                            fontSize: '0.68rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '4px',
+                            boxShadow: '0 2px 6px rgba(2,132,199,0.25)'
+                          }}
+                        >
+                          <Phone size={12} />
+                          <span>Dispatch via SMS</span>
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: '0.68rem', color: '#64748b' }}>
+                      No emergency contacts configured.{' '}
+                      <button
+                        onClick={() => setIsContactModalOpen(true)}
+                        style={{ color: '#2563eb', fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                      >
+                        + Add trusted contact
+                      </button>{' '}
+                      to receive live emergency alerts.
+                    </div>
+                  )}
+                </div>
+
                 {/* Live Tracking Map Card */}
                 <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '12px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
@@ -1739,6 +2129,17 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
               </div>
             </div>
           )}
+
+      {/* Emergency Contact Management & SOS Dispatch Modal */}
+      <EmergencyContactModal
+        isOpen={isContactModalOpen}
+        onClose={() => setIsContactModalOpen(false)}
+        activeReport={activeReport}
+        onAlertDispatched={(_contact, channel) => {
+          setHardwareTriggerToast(`Emergency alert dispatched to ${_contact.name} via ${channel.toUpperCase()}`);
+          setTimeout(() => setHardwareTriggerToast(null), 4000);
+        }}
+      />
     </div>
   );
 };

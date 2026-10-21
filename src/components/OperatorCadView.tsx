@@ -12,16 +12,21 @@ import {
   Globe,
   Activity,
   CheckCircle2,
-  ShieldAlert
+  ShieldAlert,
+  Users,
+  Share2,
+  Phone
 } from 'lucide-react';
 import { TacticalEmergencyMap } from './TacticalEmergencyMap';
+import { emergencyContactService } from '../services/emergencyContactService';
 import type {
   StructuredTriage,
   SafetyFloor,
   AgencyDispatchState,
   SafeSignalQuestion,
   UrgencyLevel,
-  EvidenceItem
+  EvidenceItem,
+  EmergencyContact
 } from '../types';
 import type { EmergencyServiceEntity } from '../services/locationService';
 import type { EmergencyReport, OperatorSession } from '../types/report';
@@ -117,6 +122,18 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
   // Custom question state for operator
   const [customQuestionInput, setCustomQuestionInput] = useState('');
   const [isCustomQuestionSent, setIsCustomQuestionSent] = useState(false);
+
+  // Emergency Contacts state for operator console
+  const [emergencyContacts, setEmergencyContacts] = useState<EmergencyContact[]>(() =>
+    emergencyContactService.getContacts()
+  );
+
+  useEffect(() => {
+    const unsub = emergencyContactService.subscribe((list) => {
+      setEmergencyContacts(list);
+    });
+    return unsub;
+  }, []);
 
   // Live Call Duration Timer & State (96s = 01:36 initially)
   const [callDuration, setCallDuration] = useState(96);
@@ -567,6 +584,104 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
                     </div>
                   </div>
                 </div>
+              </div>
+
+              {/* Row 3: Registered Citizen Emergency Contact Bar */}
+              <div
+                style={{
+                  marginTop: '8px',
+                  background: '#f8fafc',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '6px',
+                  padding: '6px 10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  fontSize: '0.68rem'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div
+                    style={{
+                      width: 24,
+                      height: 24,
+                      borderRadius: '50%',
+                      background: '#dbeafe',
+                      color: '#1d4ed8',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    <Users size={12} />
+                  </div>
+                  <div>
+                    <span style={{ fontWeight: 800, color: '#0f172a' }}>
+                      EMERGENCY CONTACT:{' '}
+                      {emergencyContacts[0]
+                        ? `${emergencyContacts[0].name} (${emergencyContacts[0].relationship})`
+                        : 'None Registered'}
+                    </span>
+                    {emergencyContacts[0] && (
+                      <span style={{ color: '#059669', marginLeft: '6px', fontWeight: 600 }}>
+                        {emergencyContacts[0].phone} • WhatsApp &amp; SMS Enabled
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {emergencyContacts[0] && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <button
+                      onClick={() => {
+                        if (activeReport) {
+                          emergencyContactService.dispatchAlert(emergencyContacts[0], activeReport, 'whatsapp');
+                        }
+                      }}
+                      style={{
+                        background: '#25D366',
+                        color: '#ffffff',
+                        border: 'none',
+                        borderRadius: '4px',
+                        padding: '4px 8px',
+                        fontSize: '0.62rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '3px'
+                      }}
+                      title="Dispatch WhatsApp CAD Brief to Emergency Contact"
+                    >
+                      <Share2 size={10} />
+                      <span>WhatsApp SOS</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (activeReport) {
+                          emergencyContactService.dispatchAlert(emergencyContacts[0], activeReport, 'sms');
+                        }
+                      }}
+                      style={{
+                        background: '#0284c7',
+                        color: '#ffffff',
+                        border: 'none',
+                        borderRadius: '4px',
+                        padding: '4px 8px',
+                        fontSize: '0.62rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '3px'
+                      }}
+                      title="Dispatch SMS CAD Brief to Emergency Contact"
+                    >
+                      <Phone size={10} />
+                      <span>SMS SOS</span>
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1427,6 +1542,85 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
                         {isLegalAssigned ? '✓ Assigned' : 'Assign DLSA'}
                       </button>
                     </div>
+
+                    {/* 5. CITIZEN EMERGENCY CONTACT (FAMILY / GUARDIAN SOS) */}
+                    <div style={{
+                      border: '1.5px solid #059669',
+                      background: '#f0fdf4',
+                      borderRadius: '6px',
+                      padding: '8px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{
+                          width: 28,
+                          height: 28,
+                          borderRadius: '50%',
+                          background: '#059669',
+                          color: '#ffffff',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '0.62rem',
+                          fontWeight: 900
+                        }}>
+                          SOS
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '0.74rem', fontWeight: 800, color: '#0f172a' }}>
+                            {emergencyContacts[0] ? emergencyContacts[0].name : 'Emergency Contact'} (WhatsApp &amp; SMS)
+                          </div>
+                          <div style={{ fontSize: '0.62rem', color: '#166534', display: 'flex', gap: '6px', alignItems: 'center' }}>
+                            <span>{emergencyContacts[0] ? `${emergencyContacts[0].relationship} • ${emergencyContacts[0].phone}` : 'No contact set'}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        <button
+                          onClick={() => {
+                            if (emergencyContacts[0] && activeReport) {
+                              emergencyContactService.dispatchAlert(emergencyContacts[0], activeReport, 'whatsapp');
+                            }
+                          }}
+                          style={{
+                            background: '#25D366',
+                            color: '#ffffff',
+                            border: 'none',
+                            padding: '5px 8px',
+                            borderRadius: '4px',
+                            fontSize: '0.64rem',
+                            fontWeight: 800,
+                            cursor: 'pointer'
+                          }}
+                          title="Dispatch WhatsApp Alert to Emergency Contact"
+                        >
+                          WhatsApp
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (emergencyContacts[0] && activeReport) {
+                              emergencyContactService.dispatchAlert(emergencyContacts[0], activeReport, 'sms');
+                            }
+                          }}
+                          style={{
+                            background: '#0284c7',
+                            color: '#ffffff',
+                            border: 'none',
+                            padding: '5px 8px',
+                            borderRadius: '4px',
+                            fontSize: '0.64rem',
+                            fontWeight: 800,
+                            cursor: 'pointer'
+                          }}
+                          title="Dispatch SMS Alert to Emergency Contact"
+                        >
+                          SMS
+                        </button>
+                      </div>
+                    </div>
                   </div>
 
                   {/* One-Click Coordinated Dispatch All Button */}
@@ -1436,6 +1630,9 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
                       onDispatchAgency('medical');
                       onDispatchAgency('shelter');
                       onDispatchAgency('legalAid');
+                      if (emergencyContacts[0] && activeReport) {
+                        emergencyContactService.dispatchAlert(emergencyContacts[0], activeReport, 'whatsapp');
+                      }
                     }}
                     style={{
                       width: '100%',
