@@ -18,6 +18,7 @@ import {
   Copy
 } from 'lucide-react';
 import { speechService } from '../services/speechRecognitionService';
+import { parseEmergencyKeywords } from '../services/emergencyKeywordService';
 import { TacticalEmergencyMap } from './TacticalEmergencyMap';
 import { deviceLocationService } from '../services/deviceLocationService';
 import { emergencyContactService } from '../services/emergencyContactService';
@@ -1212,7 +1213,55 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
                   )}
                 </div>
                 <div style={{ fontSize: '0.86rem', color: transcript ? '#f1f5f9' : '#94a3b8', lineHeight: 1.45, fontWeight: 500, minHeight: '36px' }}>
-                  {transcript || (
+                  {transcript ? (() => {
+                    const parsed = parseEmergencyKeywords(transcript);
+                    return (
+                      <div>
+                        <div>
+                          {parsed.segments.map((seg, idx) =>
+                            seg.isKeyword ? (
+                              <mark
+                                key={idx}
+                                style={{
+                                  background: seg.badgeColor || '#dc2626',
+                                  color: '#ffffff',
+                                  padding: '1px 5px',
+                                  borderRadius: '4px',
+                                  fontWeight: 700,
+                                  fontSize: '0.84rem',
+                                  margin: '0 2px'
+                                }}
+                              >
+                                {seg.text}
+                              </mark>
+                            ) : (
+                              <span key={idx}>{seg.text}</span>
+                            )
+                          )}
+                        </div>
+                        {parsed.detectedKeywords.length > 0 && (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '8px' }}>
+                            {parsed.detectedKeywords.map((kw, kidx) => (
+                              <span
+                                key={kidx}
+                                style={{
+                                  fontSize: '0.66rem',
+                                  padding: '2px 7px',
+                                  borderRadius: '12px',
+                                  background: 'rgba(255, 255, 255, 0.1)',
+                                  border: `1px solid ${kw.color}`,
+                                  color: kw.color,
+                                  fontWeight: 800
+                                }}
+                              >
+                                ● {kw.label}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })() : (
                     <span style={{ fontStyle: 'italic', opacity: 0.8 }}>
                       No words spoken yet. Tap the microphone above to speak into your mic, or use "Type instead" below.
                     </span>

@@ -23,8 +23,10 @@ import android.webkit.WebView;
 import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
+import android.speech.tts.TextToSpeech;
 import com.getcapacitor.BridgeActivity;
 import java.util.ArrayList;
+import java.util.Locale;
 
 public class MainActivity extends BridgeActivity {
     private boolean isVolumeUpPressed = false;
@@ -37,17 +39,28 @@ public class MainActivity extends BridgeActivity {
 
     private SpeechRecognizer speechRecognizer = null;
     private boolean isNativeSpeechListening = false;
-    private String activeSpeechLanguage = "hi-IN";
+    private String activeSpeechLanguage = "en-IN";
+    private TextToSpeech nativeTTS = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         unlockAndTurnScreenOn();
         super.onCreate(savedInstanceState);
 
-        // Attach native bridge to WebView once ready
+        // Attach native bridge to WebView immediately and on short delayed ticks
+        setupNativeBridge();
+        mainHandler.postDelayed(this::setupNativeBridge, 250);
         mainHandler.postDelayed(this::setupNativeBridge, 800);
 
-        // Proactively request SMS and Audio recording runtime permissions
+        try {
+            nativeTTS = new TextToSpeech(this, status -> {
+                if (status == TextToSpeech.SUCCESS && nativeTTS != null) {
+                    nativeTTS.setLanguage(new Locale("hi", "IN"));
+                }
+            });
+        } catch (Exception ignored) {}
+
+        // Proactively request SMS, Audio recording, and Location permissions
         checkAndRequestPermissions();
 
         handleIntent(getIntent());
@@ -140,7 +153,7 @@ public class MainActivity extends BridgeActivity {
                     }
                 }
 
-                activeSpeechLanguage = (lang != null && (lang.contains("en") || lang.contains("English"))) ? "en-IN" : "hi-IN";
+                activeSpeechLanguage = (lang != null && (lang.equals("Hindi") || lang.equals("hi-IN"))) ? "hi-IN" : "en-IN";
 
                 if (speechRecognizer != null) {
                     try { speechRecognizer.destroy(); } catch (Exception ignored) {}
@@ -313,6 +326,17 @@ public class MainActivity extends BridgeActivity {
         @JavascriptInterface
         public void stopSpeechRecognition() {
             stopNativeSpeechRecognizer();
+        }
+
+        @JavascriptInterface
+        public void speak(String text) {
+            if (nativeTTS != null && text != null) {
+                runOnUiThread(() -> {
+                    try {
+                        nativeTTS.speak(text, TextToSpeech.QUEUE_FLUSH, null, "SaathiTTS");
+                    } catch (Exception ignored) {}
+                });
+            }
         }
 
         @JavascriptInterface

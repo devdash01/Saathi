@@ -11,6 +11,8 @@
  *    - Multi-sentence accumulation across dictation pauses.
  */
 
+import { devanagariToHinglish } from './transliterationService';
+
 export interface SpeechRecognitionResultState {
   transcript: string;
   isFinal: boolean;
@@ -109,12 +111,13 @@ export class HybridSpeechRecognitionService {
         if (interimInCurrentSlice) parts.push(interimInCurrentSlice);
 
         const fullLiveText = parts.join(' ').trim();
-        this.lastEmittedTranscript = fullLiveText;
+        const formatted = this.currentLanguage === 'hi-IN' ? fullLiveText : devanagariToHinglish(fullLiveText);
+        this.lastEmittedTranscript = formatted;
         const isFinal = Boolean(finalInCurrentSlice && !interimInCurrentSlice);
 
-        if (fullLiveText && this.onResultCallback) {
+        if (formatted && this.onResultCallback) {
           this.onResultCallback({
-            transcript: fullLiveText,
+            transcript: formatted,
             isFinal
           });
         }
@@ -168,7 +171,12 @@ export class HybridSpeechRecognitionService {
   }
 
   public setLanguage(lang: 'Hinglish' | 'Hindi' | 'English'): void {
-    this.currentLanguage = lang === 'English' ? 'en-IN' : 'hi-IN';
+    if (lang === 'Hindi') {
+      this.currentLanguage = 'hi-IN';
+    } else {
+      // Hinglish & English use en-IN for clean Roman Hinglish transcription
+      this.currentLanguage = 'en-IN';
+    }
     if (this.recognition) {
       this.recognition.lang = this.currentLanguage;
     }
@@ -226,7 +234,8 @@ export class HybridSpeechRecognitionService {
     this.nativeSpeechResultHandler = (e: any) => {
       const data = e.detail;
       if (data && data.transcript && this.onResultCallback) {
-        const text = (data.transcript || '').trim();
+        const raw = (data.transcript || '').trim();
+        const text = this.currentLanguage === 'hi-IN' ? raw : devanagariToHinglish(raw);
         if (data.isFinal) {
           this.nativeAccumulatedFinal = this.nativeAccumulatedFinal
             ? `${this.nativeAccumulatedFinal} ${text}`.trim()

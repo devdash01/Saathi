@@ -17,6 +17,7 @@ import {
   reverseGeocodeCoords,
   type EmergencyServiceEntity
 } from './services/locationService';
+import { fetchLiveNearbyFacilities } from './services/realEmergencyFacilitiesService';
 import { networkDeliveryService } from './services/networkDeliveryService';
 import { reportStorageService } from './services/reportStorageService';
 import { deviceLocationService, type DeviceLocationResult } from './services/deviceLocationService';
@@ -443,6 +444,11 @@ export function App() {
 
       const nearby = getNearbyServicesForCoordinates(coords[0], coords[1], resolvedAddress);
       setNearbyServices(nearby);
+      fetchLiveNearbyFacilities(coords[0], coords[1], resolvedAddress).then((liveNearby) => {
+        if (liveNearby && liveNearby.length > 0) {
+          setNearbyServices(liveNearby);
+        }
+      }).catch(() => {});
 
       const updated: EmergencyReport = {
         ...activeReport,

@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { TacticalEmergencyMap } from './TacticalEmergencyMap';
 import { emergencyContactService } from '../services/emergencyContactService';
+import { parseEmergencyKeywords } from '../services/emergencyKeywordService';
 import type {
   StructuredTriage,
   SafetyFloor,
@@ -740,28 +741,33 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
                         <span style={{ color: '#dc2626', fontWeight: 800, width: '54px' }}>CALLER</span>
                         <span style={{ flex: 1 }}>
                           {(() => {
-                            const keywords = (triage?.evidenceLinks || [])
-                              .map((e: EvidenceItem) => e.quoteHinglish.toLowerCase().trim())
-                              .filter((w: string) => w && w.length > 1);
-
-                            if (!keywords.length) return rawCallerText;
-
-                            const sortedKeywords = [...keywords].sort((a, b) => b.length - a.length);
-                            const regex = new RegExp(`(${sortedKeywords.map((k: string) => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'gi');
-                            const parts = rawCallerText.split(regex);
-                            const evidenceMap = new Map((triage.evidenceLinks || []).map((e: EvidenceItem) => [e.quoteHinglish.toLowerCase().trim(), e]));
-
-                            return parts.map((part, i) => {
-                              const matchedEv = evidenceMap.get(part.toLowerCase());
-                              if (matchedEv) {
-                                return (
-                                  <mark key={i} className="keyword-yellow-tag" title={matchedEv.label}>
-                                    {part}
-                                  </mark>
-                                );
-                              }
-                              return <span key={i}>{part}</span>;
-                            });
+                            const parsed = parseEmergencyKeywords(rawCallerText);
+                            if (!parsed.segments.length) return rawCallerText;
+                            return (
+                              <span>
+                                {parsed.segments.map((seg, i) =>
+                                  seg.isKeyword ? (
+                                    <mark
+                                      key={i}
+                                      style={{
+                                        background: seg.badgeColor || '#dc2626',
+                                        color: '#ffffff',
+                                        padding: '1px 5px',
+                                        borderRadius: '3px',
+                                        fontWeight: 800,
+                                        fontSize: '0.72rem',
+                                        margin: '0 2px'
+                                      }}
+                                      title={seg.label}
+                                    >
+                                      {seg.text}
+                                    </mark>
+                                  ) : (
+                                    <span key={i}>{seg.text}</span>
+                                  )
+                                )}
+                              </span>
+                            );
                           })()}
                         </span>
                       </div>
