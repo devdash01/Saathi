@@ -276,11 +276,17 @@ export function App() {
       text: string,
       contextHint?: string,
       audioUrl?: string,
-      isRemoteSync: boolean = false,
-      remoteLocation?: EmergencyReport['location'],
-      remoteNearbyServices?: EmergencyServiceEntity[],
-      isFinal: boolean = true
+      isFinal: boolean = true,
+      options?: {
+        isRemoteSync?: boolean;
+        remoteLocation?: EmergencyReport['location'];
+        remoteNearbyServices?: EmergencyServiceEntity[];
+      }
     ) => {
+      const isRemoteSync = options?.isRemoteSync ?? false;
+      const remoteLocation = options?.remoteLocation;
+      const remoteNearbyServices = options?.remoteNearbyServices;
+
       if (!text || text.trim().length === 0) return;
       if (text === lastInputTextRef.current && !isFinal) return;
       lastInputTextRef.current = text;
@@ -416,27 +422,46 @@ export function App() {
         return [currentReport, ...prev];
       });
 
-      // E & F. Debounce heavy background persistence & network broadcasts using latest ref
-      if (syncDebounceRef.current) {
-        window.clearTimeout(syncDebounceRef.current);
-      }
-      syncDebounceRef.current = window.setTimeout(() => {
-        const reportToPersist = latestReportRef.current;
-        reportStorageService.saveReportLocally(reportToPersist).catch(console.warn);
-        networkDeliveryService.submitReport(reportToPersist).catch(console.warn);
+      // E & F. Network broadcast & persistence: Instant 0ms for final commits, 100ms throttle for interim partials
+      if (!isRemoteSync) {
+        if (isFinal) {
+          // Final sentence committed: cancel any debounce and broadcast IMMEDIATELY with zero delay!
+          if (syncDebounceRef.current) {
+            window.clearTimeout(syncDebounceRef.current);
+            syncDebounceRef.current = null;
+          }
+          const reportToPersist = latestReportRef.current;
+          reportStorageService.saveReportLocally(reportToPersist).catch(console.warn);
+          networkDeliveryService.submitReport(reportToPersist).catch(console.warn);
 
-        // Cloud real-time sync broadcast to paired CAD / Phone consoles across mobile data
-        if (!isRemoteSync) {
           cloudSyncService.broadcast('phone', 'CALLER_INPUT', {
             text,
             contextHint,
             audioUrl,
             callerAnswers,
             location: reportToPersist.location,
-            nearbyServices: reportToPersist.location.source === 'live_gps' ? nearbyServicesRef.current : instantGeo.nearbyServices
+            nearbyServices: reportToPersist.location.source === 'live_gps' ? nearbyServicesRef.current : instantGeo.nearbyServices,
+            isFinal: true
           });
+        } else {
+          // Interim partial speech: quick 100ms throttle so console displays words live in real time
+          if (syncDebounceRef.current) {
+            window.clearTimeout(syncDebounceRef.current);
+          }
+          syncDebounceRef.current = window.setTimeout(() => {
+            const reportToPersist = latestReportRef.current;
+            cloudSyncService.broadcast('phone', 'CALLER_INPUT', {
+              text,
+              contextHint,
+              audioUrl,
+              callerAnswers,
+              location: reportToPersist.location,
+              nearbyServices: reportToPersist.location.source === 'live_gps' ? nearbyServicesRef.current : instantGeo.nearbyServices,
+              isFinal: false
+            });
+          }, 100);
         }
-      }, 350);
+      }
 
       // G. Background async refinement: Debounced Sarvam translation (non-blocking)
       if (translationDebounceRef.current) {
@@ -913,9 +938,13 @@ export function App() {
     const unsubEvents = cloudSyncService.subscribeEvents((evt: CloudSyncEvent) => {
       startTransition(() => {
         if (evt.type === 'CALLER_INPUT') {
-          const { text, contextHint, audioUrl, location: remoteLoc, nearbyServices: remoteNearby } = evt.payload;
+          const { text, contextHint, audioUrl, location: remoteLoc, nearbyServices: remoteNearby, isFinal: remoteIsFinal } = evt.payload;
           if (text) {
-            handleUserPhoneInput(text, contextHint, audioUrl, true /* isRemoteSync */, remoteLoc, remoteNearby);
+            handleUserPhoneInput(text, contextHint, audioUrl, remoteIsFinal !== false, {
+              isRemoteSync: true,
+              remoteLocation: remoteLoc,
+              remoteNearbyServices: remoteNearby
+            });
             if (remoteLoc && remoteLoc.coords) {
               setActiveReport((prev) => ({
                 ...prev,
@@ -931,8 +960,10 @@ export function App() {
                 setNearbyServices(remoteNearby);
               }
             }
-            setDispatchAlertToast(`[Cloud Sync] Incoming distress from mobile device #${evt.channelId}`);
-            setTimeout(() => setDispatchAlertToast(null), 4000);
+            if (remoteIsFinal !== false) {
+              setDispatchAlertToast(`[Cloud Sync] Incoming distress from mobile device #${evt.channelId}`);
+              setTimeout(() => setDispatchAlertToast(null), 3500);
+            }
           }
         } else if (evt.type === 'CALLER_ANSWER') {
           const { questionId, answer } = evt.payload;

@@ -261,7 +261,42 @@ const COMMON_DEV_WORDS: Record<string, string> = {
   'रोहिणी': 'rohini',
   'द्वारका': 'dwarka',
   'दिल्ली': 'delhi',
-  'मेट्रो': 'metro'
+  'मेट्रो': 'metro',
+
+  // Common English loanwords spoken in Hinglish distress calls
+  'प्लीज': 'please',
+  'प्लिज': 'please',
+  'प्लीज़': 'please',
+  'हेल्प': 'help',
+  'सर': 'sir',
+  'मैम': "ma'am",
+  'मैडम': 'madam',
+  'सॉरी': 'sorry',
+  'थैंक्यू': 'thank you',
+  'थैंक्स': 'thanks',
+  'कॉल': 'call',
+  'लोकेशन': 'location',
+  'इमरजेंसी': 'emergency',
+  'डॉक्टर': 'doctor',
+  'फास्ट': 'fast',
+  'स्टॉप': 'stop',
+  'वेट': 'wait',
+  'गेट': 'gate',
+  'रूम': 'room',
+  'डोर': 'door',
+  'रोड': 'road',
+  'स्टेशन': 'station',
+  'बस': 'bus',
+  'कार': 'car',
+  'बाइक': 'bike',
+  'ऑटो': 'auto',
+  'ड्राइवर': 'driver',
+  'नंबर': 'number',
+  'एड्रेस': 'address',
+  'प्रॉब्लम': 'problem',
+  'मैसेज': 'message',
+  'ओके': 'okay',
+  'बाय': 'bye'
 };
 
 /**
