@@ -696,7 +696,11 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
                       </span>
                     </div>
                     <div style={{ fontSize: '0.76rem', color: '#334155', fontWeight: 500, lineHeight: 1.4, marginBottom: '8px' }}>
-                      "{transcript ? (transcript.length > 85 ? `${transcript.slice(0, 85)}...` : transcript) : 'Active emergency report in progress.'}"
+                      {transcript ? (
+                        <HighlightedEmergencyText text={transcript.length > 85 ? `${transcript.slice(0, 85)}...` : transcript} />
+                      ) : (
+                        '"Active emergency report in progress."'
+                      )}
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
                       <button

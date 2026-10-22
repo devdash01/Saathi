@@ -28,6 +28,11 @@ export const EMERGENCY_KEYWORDS: KeywordDefinition[] = [
     label: 'DISTRESS · HELP REQUEST',
     color: '#dc2626',
     words: [
+      // Single root emergency words
+      'help', 'madad', 'bachao', 'save', 'rescue', 'danger', 'khatra', 'khatre', 'scared',
+      'afraid', 'trapped', 'urgent', 'emergency', 'darr', 'phas', 'phasa', 'phasi', 'fasa',
+      'fasi', 'khatarnak', 'nikalo', 'sos', 'bachaao', 'bachaoo', 'madat', 'not safe',
+      'safe nahi', 'in danger', 'need help',
       // English
       'help me', 'please help', 'somebody help', 'send help', 'i need help', 'emergency',
       'urgent', 'please hurry', 'save me', 'rescue me', 'get me out', 'i am in danger',
@@ -59,6 +64,12 @@ export const EMERGENCY_KEYWORDS: KeywordDefinition[] = [
     label: 'DOMESTIC VIOLENCE · IPV',
     color: '#e11d48',
     words: [
+      // Standalone core root words
+      'hit', 'slap', 'slapped', 'punch', 'punched', 'kick', 'kicked', 'choke', 'choked',
+      'strangle', 'strangled', 'beat', 'beating', 'beaten', 'dragged', 'burn', 'burned',
+      'stab', 'stabbed', 'violence', 'violent', 'abuse', 'abusive', 'dowry', 'dahej',
+      'maar', 'maara', 'peeta', 'peetna', 'thappad', 'laat', 'dhakka', 'ghaseeta', 'ghasita',
+      'mar raha', 'maarra', 'maar rha',
       // Physical violence
       'he hit me', 'she hit me', 'he slapped me', 'he punched me', 'he kicked me',
       'he pushed me', 'he dragged me', 'he beat me', 'he choked me', 'he strangled me',
@@ -95,12 +106,12 @@ export const EMERGENCY_KEYWORDS: KeywordDefinition[] = [
     color: '#b91c1c',
     words: [
       // Weapons & objects
-      'gun', 'pistol', 'revolver', 'rifle', 'firearm', 'knife', 'chaku', 'chaaku', 'chakku',
+      'gun', 'guns', 'pistol', 'revolver', 'rifle', 'firearm', 'knife', 'knives', 'chaku', 'chaaku', 'chakku',
       'blade', 'razor', 'sword', 'talwar', 'dagger', 'machete', 'axe', 'kulhadi', 'rod',
       'iron rod', 'danda', 'stick', 'bat', 'baseball bat', 'hammer', 'hathoda', 'screwdriver',
       'scissors', 'broken glass', 'bottle', 'stone', 'brick', 'acid', 'petrol', 'kerosene',
       'lighter', 'explosive', 'bomb', 'country-made pistol', 'katta', 'katta hai', 'katta nikala',
-      'weapon', 'sharp object', 'चाकू', 'बंदूक', 'हथियार',
+      'bandook', 'banduk', 'tamancha', 'hathiyar', 'weapon', 'weapons', 'sharp object', 'चाकू', 'बंदूक', 'हथियार',
       // Threatening actions
       'he has a gun', 'she has a knife', 'he pulled a knife', 'he is holding a weapon',
       'he pointed a gun at me', 'he threatened me with a knife', 'he is coming with a weapon',
@@ -120,7 +131,12 @@ export const EMERGENCY_KEYWORDS: KeywordDefinition[] = [
     label: 'STALKING · HARASSMENT',
     color: '#9333ea',
     words: [
-      'stalking', 'stalker', 'following me', 'following me home', 'waiting outside',
+      // Core root words
+      'stalk', 'stalking', 'stalker', 'following', 'follower', 'peecha', 'ghoorta',
+      'blackmail', 'extortion', 'doxxing', 'harassment', 'harass', 'harassing',
+      'chhed-chhad', 'eve-teasing', 'lurking', 'cyberstalking',
+      // Phrases
+      'following me', 'following me home', 'waiting outside',
       'keeps following me', "won't leave me alone", 'watching my house', 'watching me',
       'lurking outside', 'following my route', 'tracking my location', 'tracking my phone',
       'gps tracker', 'hidden tracker', 'keeps calling', 'repeated calls', 'unwanted calls',
@@ -143,7 +159,10 @@ export const EMERGENCY_KEYWORDS: KeywordDefinition[] = [
     label: 'SEXUAL VIOLENCE · COERCION',
     color: '#c026d3',
     words: [
-      'rape', 'sexual assault', 'sexual abuse', 'forced sex', 'non-consensual sex',
+      // Core root words
+      'rape', 'assault', 'molest', 'molestation', 'groping', 'grope', 'balatkar', 'zabardasti',
+      // Phrases
+      'sexual assault', 'sexual abuse', 'forced sex', 'non-consensual sex',
       'sexual coercion', 'unwanted sexual touching', 'groping', 'molestation', 'attempted rape',
       'sexually assaulted', 'forced me', 'i said no', "i didn't consent", "he wouldn't stop",
       'i was unconscious', 'i was drugged', 'someone touched me', 'he forced himself on me',
@@ -164,10 +183,14 @@ export const EMERGENCY_KEYWORDS: KeywordDefinition[] = [
     label: 'PREGNANCY · OBSTETRIC EMERGENCY',
     color: '#f59e0b',
     words: [
-      'pregnant', 'pregnancy', 'expecting a baby', 'due date', 'due today', 'overdue',
+      // Core root words
+      'pregnant', 'pregnancy', 'expecting', 'labour', 'labor', 'contraction', 'contractions',
+      'delivery', 'childbirth', 'water broke', 'miscarriage',
+      // Phrases
+      'expecting a baby', 'due date', 'due today', 'overdue',
       'full term', 'weeks pregnant', 'months pregnant', 'high-risk pregnancy', 'twins',
-      'triplets', 'prenatal', 'antenatal', 'maternity', 'labour', 'labor', 'contractions',
-      'water broke', 'waters breaking', 'mucus plug', 'delivery', 'childbirth', 'birth',
+      'triplets', 'prenatal', 'antenatal', 'maternity', 'contractions',
+      'waters breaking', 'mucus plug', 'birth',
       'baby coming', 'baby is coming now',
       'pregnant hoon', 'pregnant hu', 'pregnancy hai', 'pet mein bachcha hai', 'bachcha hone wala hai',
       'delivery ka time aa gaya', 'meri due date aaj hai', 'due date nikal gayi', 'nau mahine ho gaye',
@@ -200,6 +223,10 @@ export const EMERGENCY_KEYWORDS: KeywordDefinition[] = [
     label: 'MEDICAL EMERGENCY · INJURY',
     color: '#ea580c',
     words: [
+      // Core root words
+      'blood', 'hurt', 'pain', 'dard', 'injury', 'injuries', 'injured', 'chot', 'wound', 'wounds',
+      'cut', 'cuts', 'faint', 'fainting', 'behosh', 'saans', 'breathe', 'breathing', 'choke', 'choking',
+      'bleeding', 'fracture', 'burn', 'burns', 'seizure', 'accident', 'unconscious',
       // Breathing & consciousness
       "can't breathe", 'difficulty breathing', 'shortness of breath', 'choking', 'gasping',
       'stopped breathing', 'not breathing', 'unconscious', 'passed out', 'fainted',
@@ -280,6 +307,8 @@ export const EMERGENCY_KEYWORDS: KeywordDefinition[] = [
     label: 'SELF-HARM · SUICIDE RISK',
     color: '#9f1239',
     words: [
+      // Core root words
+      'suicide', 'suicidal', 'die', 'dying', 'kill myself', 'hurt myself', 'end my life', 'want to die', 'mar jaana', 'aatmahatya',
       'i want to die', "i don't want to live", 'i want to end my life', "i'm going to kill myself",
       'i might hurt myself', 'i want to disappear forever', "i can't go on", "there's no point living",
       'everyone would be better without me', 'goodbye forever', 'this is my last call',
@@ -300,6 +329,9 @@ export const EMERGENCY_KEYWORDS: KeywordDefinition[] = [
     label: 'THREAT TO LIFE',
     color: '#b91c1c',
     words: [
+      // Core root words
+      'kill', 'killing', 'killed', 'murder', 'murdering', 'shoot', 'shooting', 'stab', 'stabbing',
+      'slaughter', 'attack', 'jaan se maar', 'goli maar', 'chaku maar',
       "i'll kill you", "i'm going to kill her", 'i will kill him', "i'll shoot you",
       "i'll stab you", "i'll burn this house", "you won't survive", 'i will finish you',
       "i'm coming for you", 'i know where you live', 'your children will pay',
@@ -342,10 +374,14 @@ export const EMERGENCY_KEYWORDS: KeywordDefinition[] = [
     label: 'ROBBERY · BREAK-IN · INTRUDER',
     color: '#ea580c',
     words: [
-      'robbery', 'armed robbery', 'mugging', 'snatching', 'chain snatching', 'phone snatching',
-      'bag snatching', 'theft in progress', 'burglary', 'break-in', 'breaking the door',
-      'trying to enter', 'forced entry', 'intruder', 'stranger inside the house',
-      'someone broke in', 'trespassing', 'house invasion', 'attempted robbery', 'carjacking',
+      // Core root words
+      'robbery', 'robbed', 'robber', 'burglary', 'burglar', 'break-in', 'intruder',
+      'trespassing', 'theft', 'loot', 'looting', 'chori', 'chor', 'dacoit', 'dakaiti',
+      // Phrases
+      'armed robbery', 'mugging', 'snatching', 'chain snatching', 'phone snatching',
+      'bag snatching', 'theft in progress', 'breaking the door',
+      'trying to enter', 'forced entry', 'stranger inside the house',
+      'someone broke in', 'house invasion', 'attempted robbery', 'carjacking',
       'vehicle theft', 'vehicle blocking exit', 'vandalism', 'arson', 'setting fire',
       'threatening to burn property', 'petrol bomb', 'suspicious forced entry',
       'loot liya', 'lootne ki koshish', 'chori ho rahi hai', 'ghar mein chor ghus gaya',
@@ -362,7 +398,10 @@ export const EMERGENCY_KEYWORDS: KeywordDefinition[] = [
     label: 'FIRE · GAS LEAK · HAZARD',
     color: '#ef4444',
     words: [
-      'fire', 'flames', 'smoke', 'building on fire', 'house on fire', 'kitchen fire',
+      // Core root words
+      'fire', 'aag', 'smoke', 'dhuan', 'dhuaan', 'flames', 'explosion', 'blast',
+      // Phrases
+      'building on fire', 'house on fire', 'kitchen fire',
       'trapped in fire', 'smoke inhalation', 'gas leak', 'lpg leak', 'cylinder leaking',
       'smell of gas', 'gas cylinder explosion', 'electrical fire', 'short circuit',
       'electric sparks', 'live wire', 'chemical spill', 'toxic fumes', 'carbon monoxide alarm',
@@ -383,8 +422,11 @@ export const EMERGENCY_KEYWORDS: KeywordDefinition[] = [
     label: 'POISONING · OVERDOSE',
     color: '#c2410c',
     words: [
-      'overdose', 'too many pills', 'took too much medicine', 'sleeping pills',
-      'unknown tablets', 'poison', 'swallowed poison', 'pesticide', 'cleaning chemical',
+      // Core root words
+      'poison', 'poisoned', 'poisoning', 'toxic', 'chemical', 'chemicals', 'zehar', 'zahar', 'overdose',
+      // Phrases
+      'too many pills', 'took too much medicine', 'sleeping pills',
+      'unknown tablets', 'swallowed poison', 'pesticide', 'cleaning chemical',
       'acid ingestion', 'alcohol poisoning', 'drug overdose', 'unconscious after drinking',
       'suspected poisoning', 'drink was spiked', 'someone drugged me', 'drink tasted strange',
       'injection without consent', 'forced to take drugs', 'accidental ingestion',
@@ -670,7 +712,9 @@ export const EMERGENCY_KEYWORDS: KeywordDefinition[] = [
       'counselling chahiye', 'social worker chahiye', 'bachchon ki protection chahiye',
       'mere saath koi chale', 'safe jagah tak le chalo', 'partner ko chhodne mein help chahiye',
       'complaint karni hai', 'female operator chahiye', 'translator chahiye',
-      'police', 'pcr', '112', 'thana', 'policewala', 'police station', '108', '181', 'mahila helpline'
+      'police', 'ambulance', 'hospital', 'doctor', 'shelter', 'paramedic', 'nurse', 'clinic',
+      'pcr', '112', '108', '100', '181', '1091', '1098', 'cop', 'cops', 'thana', 'chowki',
+      'daroga', 'havaldar', 'inspector', 'policewala', 'police station', 'mahila helpline'
     ]
   },
 
@@ -768,6 +812,122 @@ interface FlatPattern {
 // Pre-index patterns sorted by length descending to prioritize longer phrases
 let CACHED_PATTERNS: FlatPattern[] | null = null;
 
+function generateKeywordVariants(rawWord: string): string[] {
+  const base = rawWord.trim().toLowerCase().replace(/[\u2018\u2019\u02BC\u02BB\u00B4`]/g, "'");
+  if (!base) return [];
+
+  const variants = new Set<string>();
+  variants.add(base);
+
+  // If contains straight apostrophe, also add version without apostrophe (e.g. can't -> cant, i'm -> im, don't -> dont)
+  if (base.includes("'")) {
+    variants.add(base.replace(/'/g, ''));
+  }
+
+  // Common English contraction expansions
+  const contractionPairs: [RegExp, string][] = [
+    [/\bi'm\b/g, 'i am'],
+    [/\bim\b/g, 'i am'],
+    [/\bcan't\b/g, 'cannot'],
+    [/\bcant\b/g, 'cannot'],
+    [/\bdon't\b/g, 'do not'],
+    [/\bdont\b/g, 'do not'],
+    [/\bwon't\b/g, 'will not'],
+    [/\bwont\b/g, 'will not'],
+    [/\bdidn't\b/g, 'did not'],
+    [/\bdidnt\b/g, 'did not'],
+    [/\bhe's\b/g, 'he is'],
+    [/\bshe's\b/g, 'she is'],
+    [/\bhe'll\b/g, 'he will'],
+    [/\bshe'll\b/g, 'she will'],
+    [/\bthere's\b/g, 'there is'],
+  ];
+
+  for (const [regex, replacement] of contractionPairs) {
+    if (regex.test(base)) {
+      variants.add(base.replace(regex, replacement));
+      if (replacement === 'i am') {
+        variants.add(base.replace(regex, "i'm"));
+        variants.add(base.replace(regex, "im"));
+      } else if (replacement === 'cannot') {
+        variants.add(base.replace(regex, "can't"));
+        variants.add(base.replace(regex, "cant"));
+      } else if (replacement === 'do not') {
+        variants.add(base.replace(regex, "don't"));
+        variants.add(base.replace(regex, "dont"));
+      } else if (replacement === 'will not') {
+        variants.add(base.replace(regex, "won't"));
+        variants.add(base.replace(regex, "wont"));
+      }
+    }
+  }
+
+  // Prefix stripping for common speech prefixes like "please ", "i need ", "he is ", "she is ", "i am ", "i'm ", "mujhe ", "main "
+  const prefixPatterns = [
+    /^please\s+/i,
+    /^i\s+need\s+/i,
+    /^he\s+is\s+/i,
+    /^she\s+is\s+/i,
+    /^they\s+are\s+/i,
+    /^(i\s+am|i'm|im)\s+/i,
+    /^mujhe\s+/i,
+    /^main\s+/i,
+    /^meri\s+/i,
+  ];
+
+  for (const prefix of prefixPatterns) {
+    if (prefix.test(base)) {
+      const stripped = base.replace(prefix, '').trim();
+      if (stripped.length >= 3) {
+        variants.add(stripped);
+        if (stripped.includes("'")) {
+          variants.add(stripped.replace(/'/g, ''));
+        }
+      }
+    }
+  }
+
+  // Also support "he [verb]" for "he is [verb]" (e.g. "he is hitting me" -> "he hitting me")
+  if (/^he\s+is\s+/i.test(base)) {
+    variants.add(base.replace(/^he\s+is\s+/i, 'he '));
+  }
+  if (/^she\s+is\s+/i.test(base)) {
+    variants.add(base.replace(/^she\s+is\s+/i, 'she '));
+  }
+
+  // Common Hindi / Hinglish spoken variations
+  if (base.includes('karo')) {
+    variants.add(base.replace(/\bkaro\b/g, 'kro'));
+    variants.add(base.replace(/\bkaro\b/g, 'krdo'));
+  }
+  if (base.includes('nahi')) {
+    variants.add(base.replace(/\bnahi\b/g, 'nhi'));
+    variants.add(base.replace(/\bnahi\b/g, 'ni'));
+  }
+  if (base.includes('raha')) {
+    variants.add(base.replace(/\braha\b/g, 'rha'));
+  }
+  if (base.includes('rahi')) {
+    variants.add(base.replace(/\brahi\b/g, 'rhi'));
+  }
+  if (base.includes('bahut')) {
+    variants.add(base.replace(/\bbahut\b/g, 'bht'));
+  }
+  if (base.includes('chaku')) {
+    variants.add(base.replace(/\bchaku\b/g, 'chaaku'));
+    variants.add(base.replace(/\bchaku\b/g, 'chakku'));
+  }
+  if (base.includes('bandook')) {
+    variants.add(base.replace(/\bbandook\b/g, 'banduk'));
+  }
+  if (base.includes('bachao')) {
+    variants.add(base.replace(/\bbachao\b/g, 'bachaao'));
+    variants.add(base.replace(/\bbachao\b/g, 'bachaoo'));
+  }
+
+  return Array.from(variants);
+}
+
 function getCachedPatterns(): FlatPattern[] {
   if (CACHED_PATTERNS) return CACHED_PATTERNS;
 
@@ -776,15 +936,17 @@ function getCachedPatterns(): FlatPattern[] {
 
   for (const def of EMERGENCY_KEYWORDS) {
     for (const raw of def.words) {
-      const w = raw.trim().toLowerCase();
-      if (!w || seen.has(w)) continue;
-      seen.add(w);
-      list.push({
-        word: w,
-        category: def.category,
-        label: def.label,
-        color: def.color
-      });
+      const generated = generateKeywordVariants(raw);
+      for (const w of generated) {
+        if (!w || seen.has(w)) continue;
+        seen.add(w);
+        list.push({
+          word: w,
+          category: def.category,
+          label: def.label,
+          color: def.color
+        });
+      }
     }
   }
 
@@ -798,6 +960,19 @@ function isAlphaNum(ch: string): boolean {
   if (!ch) return false;
   // Match Latin characters, numbers, and Devanagari range
   return /[a-zA-Z0-9\u0900-\u097F]/.test(ch);
+}
+
+function isWordCharAtIndex(str: string, index: number): boolean {
+  if (index < 0 || index >= str.length) return false;
+  const ch = str[index];
+  if (isAlphaNum(ch)) return true;
+  // Apostrophe surrounded by alphanumeric characters is part of a contraction word, not a boundary
+  if (ch === "'" || ch === '’') {
+    const prev = index > 0 ? str[index - 1] : '';
+    const next = index < str.length - 1 ? str[index + 1] : '';
+    if (isAlphaNum(prev) && isAlphaNum(next)) return true;
+  }
+  return false;
 }
 
 interface MatchInterval {
@@ -819,25 +994,24 @@ export function parseEmergencyKeywords(text: string): {
   }
 
   const patterns = getCachedPatterns();
-  const lowerText = text.toLowerCase();
+  // Normalize typographic apostrophes and quotes to standard straight single quote '
+  // All these single characters have string length 1, so character indices match 100% 1:1 with text!
+  const normalizedText = text.toLowerCase().replace(/[\u2018\u2019\u02BC\u02BB\u00B4`]/g, "'");
   const intervals: MatchInterval[] = [];
 
   for (const p of patterns) {
     const pLen = p.word.length;
     let fromIdx = 0;
 
-    while (fromIdx <= lowerText.length - pLen) {
-      const idx = lowerText.indexOf(p.word, fromIdx);
+    while (fromIdx <= normalizedText.length - pLen) {
+      const idx = normalizedText.indexOf(p.word, fromIdx);
       if (idx === -1) break;
 
       const endIdx = idx + pLen;
 
-      // Check word boundaries: character before and after must not be alphanumeric
-      const charBefore = idx > 0 ? text[idx - 1] : '';
-      const charAfter = endIdx < text.length ? text[endIdx] : '';
-
-      const leftOk = !isAlphaNum(charBefore);
-      const rightOk = !isAlphaNum(charAfter);
+      // Check word boundaries: character before and after must not be part of a word or internal contraction
+      const leftOk = !isWordCharAtIndex(normalizedText, idx - 1);
+      const rightOk = !isWordCharAtIndex(normalizedText, endIdx);
 
       if (leftOk && rightOk) {
         // Check overlap with already accepted longer intervals
