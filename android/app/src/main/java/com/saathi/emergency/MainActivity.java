@@ -169,6 +169,8 @@ public class MainActivity extends BridgeActivity {
         mainHandler.postDelayed(restartSpeechRunnable, delayMs);
     }
 
+    private String lastSentTranscript = "";
+
     private Intent createSpeechIntent() {
         Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
@@ -177,10 +179,9 @@ public class MainActivity extends BridgeActivity {
         intent.putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, false);
         intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
         intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
-        intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 15000L);
-        intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 3500L);
-        intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 3500L);
-        intent.putExtra("android.speech.extra.DICTATION_MODE", true);
+        intent.putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, getPackageName());
+        intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1200L);
+        intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1200L);
         return intent;
     }
 
@@ -215,71 +216,92 @@ public class MainActivity extends BridgeActivity {
             if (!isNativeSpeechListening) return;
 
             try {
-                if (speechRecognizer != null) {
-                    try {
-                        speechRecognizer.destroy();
-                    } catch (Exception ignored) {}
-                    speechRecognizer = null;
+                if (speechRecognizer == null) {
+                    speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
+                    speechRecognizer.setRecognitionListener(new RecognitionListener() {
+                        @Override
+                        public void onReadyForSpeech(Bundle params) {}
+
+                        @Override
+                        public void onBeginningOfSpeech() {}
+
+                        @Override
+                        public void onRmsChanged(float rmsdB) {}
+
+                        @Override
+                        public void onBufferReceived(byte[] buffer) {}
+
+                        @Override
+                        public void onEndOfSpeech() {}
+
+                        @Override
+                        public void onError(int error) {
+                            if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
+                                isNativeSpeechListening = false;
+                                sendSpeechErrorToWeb(error);
+                                return;
+                            }
+
+                            // Normal pause / no speech heard - restart listening without web disturbance
+                            if (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
+                                if (isNativeSpeechListening) {
+                                    scheduleRestart(100);
+                                }
+                                return;
+                            }
+
+                            // For busy, audio, or client errors: destroy corrupt instance and restart with clean instance
+                            try {
+                                if (speechRecognizer != null) {
+                                    speechRecognizer.destroy();
+                                }
+                            } catch (Exception ignored) {}
+                            speechRecognizer = null;
+
+                            sendSpeechErrorToWeb(error); // JS commits pending interim if any
+
+                            if (isNativeSpeechListening) {
+                                long delay = (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) ? 500 : 250;
+                                scheduleRestart(delay);
+                            }
+                        }
+
+                        @Override
+                        public void onResults(Bundle results) {
+                            String t = first(results);
+                            lastSentTranscript = "";
+                            sendSpeechResultToWeb(t, true);
+                            if (isNativeSpeechListening) {
+                                scheduleRestart(100);
+                            }
+                        }
+
+                        @Override
+                        public void onPartialResults(Bundle partialResults) {
+                            String t = first(partialResults);
+                            if (!t.isEmpty() && !t.equals(lastSentTranscript)) {
+                                lastSentTranscript = t;
+                                sendSpeechResultToWeb(t, false);
+                            }
+                        }
+
+                        @Override
+                        public void onEvent(int eventType, Bundle params) {}
+                    });
                 }
-
-                if (!isNativeSpeechListening) return;
-
-                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
-                speechRecognizer.setRecognitionListener(new RecognitionListener() {
-                    @Override
-                    public void onReadyForSpeech(Bundle params) {}
-
-                    @Override
-                    public void onBeginningOfSpeech() {}
-
-                    @Override
-                    public void onRmsChanged(float rmsdB) {}
-
-                    @Override
-                    public void onBufferReceived(byte[] buffer) {}
-
-                    @Override
-                    public void onEndOfSpeech() {}
-
-                    @Override
-                    public void onError(int error) {
-                        sendSpeechErrorToWeb(error); // JS commits pending interim
-                        if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
-                            isNativeSpeechListening = false;
-                            return;
-                        }
-                        if (isNativeSpeechListening) {
-                            scheduleRestart(error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY ? 300 : 120);
-                        }
-                    }
-
-                    @Override
-                    public void onResults(Bundle results) {
-                        String t = first(results);
-                        sendSpeechResultToWeb(t, true); // may be "" — JS handles it
-                        if (isNativeSpeechListening) {
-                            scheduleRestart(50);
-                        }
-                    }
-
-                    @Override
-                    public void onPartialResults(Bundle partialResults) {
-                        String t = first(partialResults);
-                        if (!t.isEmpty()) {
-                            sendSpeechResultToWeb(t, false);
-                        }
-                    }
-
-                    @Override
-                    public void onEvent(int eventType, Bundle params) {}
-                });
 
                 Intent intent = createSpeechIntent();
                 speechRecognizer.startListening(intent);
             } catch (Exception e) {
                 e.printStackTrace();
+                try {
+                    if (speechRecognizer != null) {
+                        speechRecognizer.destroy();
+                    }
+                } catch (Exception ignored) {}
+                speechRecognizer = null;
                 if (isNativeSpeechListening) {
-                    scheduleRestart(300);
+                    scheduleRestart(400);
                 }
             }
         });
@@ -291,7 +313,7 @@ public class MainActivity extends BridgeActivity {
             mainHandler.removeCallbacks(restartSpeechRunnable);
             if (speechRecognizer != null) {
                 try {
-                    speechRecognizer.stopListening();
+                    speechRecognizer.cancel();
                     speechRecognizer.destroy();
                 } catch (Exception ignored) {}
                 speechRecognizer = null;

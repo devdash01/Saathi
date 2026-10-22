@@ -22,6 +22,7 @@ import { networkDeliveryService } from './services/networkDeliveryService';
 import { reportStorageService } from './services/reportStorageService';
 import { deviceLocationService, type DeviceLocationResult } from './services/deviceLocationService';
 import { cloudSyncService, type SyncStatus, type CloudSyncEvent } from './services/cloudSyncService';
+import { speechService } from './services/speechRecognitionService';
 import { BellRing, WifiOff, Radio } from 'lucide-react';
 
 export function App() {
@@ -100,6 +101,7 @@ export function App() {
   const translationDebounceRef = useRef<number | null>(null);
   const syncDebounceRef = useRef<number | null>(null);
   const lastInputTextRef = useRef<string>('');
+  const lastFinalTextRef = useRef<string>('');
   const latestReportRef = useRef<EmergencyReport>(activeReport);
   useEffect(() => {
     latestReportRef.current = activeReport;
@@ -288,7 +290,12 @@ export function App() {
       const remoteNearbyServices = options?.remoteNearbyServices;
 
       if (!text || text.trim().length === 0) return;
-      if (text === lastInputTextRef.current && !isFinal) return;
+      if (isFinal) {
+        if (text === lastFinalTextRef.current) return;
+        lastFinalTextRef.current = text;
+      } else {
+        if (text === lastInputTextRef.current) return;
+      }
       lastInputTextRef.current = text;
 
       // A. Instantly extract locality & resolve coordinates + nearby services (0ms synchronous)
@@ -411,16 +418,20 @@ export function App() {
       if (!hasLiveGps && !remoteLocation) {
         setNearbyServices(instantGeo.nearbyServices);
       }
-      setAllReports((prev) => {
-        const currentReport = latestReportRef.current;
-        const idx = prev.findIndex((r) => r.id === currentReport.id);
-        if (idx >= 0) {
-          const next = [...prev];
-          next[idx] = currentReport;
-          return next;
-        }
-        return [currentReport, ...prev];
-      });
+
+      // Historical report list is only updated on finalized commits to eliminate CAD UI thrashing
+      if (isFinal) {
+        setAllReports((prev) => {
+          const currentReport = latestReportRef.current;
+          const idx = prev.findIndex((r) => r.id === currentReport.id);
+          if (idx >= 0) {
+            const next = [...prev];
+            next[idx] = currentReport;
+            return next;
+          }
+          return [currentReport, ...prev];
+        });
+      }
 
       // E & F. Network broadcast & persistence: Instant 0ms for final commits, 100ms throttle for interim partials
       if (!isRemoteSync) {
@@ -914,6 +925,8 @@ export function App() {
     };
 
     lastInputTextRef.current = '';
+    lastFinalTextRef.current = '';
+    speechService.reset();
     latestReportRef.current = newReport;
     setCallerAnswers({});
     setActiveReport(newReport);

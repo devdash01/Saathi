@@ -90,6 +90,10 @@ export class UniversalSpeechRecognitionService {
   private currentLanguage: string = 'hi-IN';
   public acc = new Accumulator();
 
+  // Deduplication guard to eliminate redundant React re-renders and network broadcasts
+  private lastEmittedText: string = '';
+  private lastEmittedFinal: boolean = false;
+
   // Android Native Bridge Listeners
   private nativeSpeechResultHandler: ((e: any) => void) | null = null;
   private nativeSpeechErrorHandler: ((e: any) => void) | null = null;
@@ -139,8 +143,10 @@ export class UniversalSpeechRecognitionService {
       };
 
       this.recognition.onend = () => {
-        this.acc.commit(); // keep anything pending
-        this.emit(true);
+        if (this.acc.interim) {
+          this.acc.commit(); // keep anything pending
+          this.emit(true);
+        }
         if (this.isListeningState) {
           setTimeout(() => {
             if (this.isListeningState && this.recognition) {
@@ -182,9 +188,16 @@ export class UniversalSpeechRecognitionService {
   }
 
   private emit(isFinal: boolean) {
+    const currentText = this.acc.text;
+    if (currentText === this.lastEmittedText && isFinal === this.lastEmittedFinal) {
+      return; // Suppress duplicate emits to keep UI buttery smooth
+    }
+    this.lastEmittedText = currentText;
+    this.lastEmittedFinal = isFinal;
+
     if (this.onResultCallback) {
       this.onResultCallback({
-        transcript: this.acc.text,
+        transcript: currentText,
         isFinal
       });
     }
@@ -263,9 +276,11 @@ export class UniversalSpeechRecognitionService {
 
     this.nativeSpeechErrorHandler = (_e: any) => {
       // On silence/pause or recognizer recreation:
-      // Commit pending interim so words never vanish!
-      this.acc.commit();
-      this.emit(true);
+      // Only commit if there is actual pending interim text!
+      if (this.acc.interim) {
+        this.acc.commit();
+        this.emit(true);
+      }
     };
 
     window.addEventListener('saathi:native-speech-result', this.nativeSpeechResultHandler);
@@ -285,8 +300,10 @@ export class UniversalSpeechRecognitionService {
 
   public stop(): void {
     this.isListeningState = false;
-    this.acc.commit();
-    this.emit(true);
+    if (this.acc.interim) {
+      this.acc.commit();
+      this.emit(true);
+    }
 
     const win = (typeof window !== 'undefined' ? window : {}) as IWindowWithSpeech;
     if (win.SaathiNative && typeof win.SaathiNative.stopSpeechRecognition === 'function') {
@@ -309,6 +326,8 @@ export class UniversalSpeechRecognitionService {
 
   public reset(): void {
     this.acc.reset();
+    this.lastEmittedText = '';
+    this.lastEmittedFinal = false;
     const win = (typeof window !== 'undefined' ? window : {}) as IWindowWithSpeech;
     if (win.SaathiNative && typeof win.SaathiNative.resetSpeechAccumulator === 'function') {
       try {

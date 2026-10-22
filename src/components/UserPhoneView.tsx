@@ -254,6 +254,8 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
 
   // Reference for single active voice message bubble to prevent duplicate messages
   const currentVoiceMessageIdRef = useRef<string | null>(null);
+  const parentInputThrottleRef = useRef<number | null>(null);
+  const lastSpokenRef = useRef<string>('');
 
   // Core Real-Time Voice Input Handler
   const startLiveVoiceRecognition = useCallback(() => {
@@ -261,19 +263,38 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
     setSarvamStatus('transcribing');
     const voiceMsgId = `voice-${Date.now()}`;
     currentVoiceMessageIdRef.current = voiceMsgId;
+    lastSpokenRef.current = '';
 
     const started = speechService.start(
       (result) => {
         const spoken = (result.transcript || '').trim();
         if (!spoken) return;
-        setVoiceError(null);
+        if (spoken === lastSpokenRef.current && !result.isFinal) return;
+        lastSpokenRef.current = spoken;
 
+        setVoiceError(null);
         setTranscript(spoken);
         transcriptRef.current = spoken;
-        onUserInputChange(spoken, undefined, undefined, result.isFinal);
+
+        // Instant commit on final result, 160ms throttle on interim partials to avoid UI thread lag
+        if (result.isFinal) {
+          if (parentInputThrottleRef.current) {
+            window.clearTimeout(parentInputThrottleRef.current);
+            parentInputThrottleRef.current = null;
+          }
+          onUserInputChange(spoken, undefined, undefined, true);
+        } else {
+          if (!parentInputThrottleRef.current) {
+            parentInputThrottleRef.current = window.setTimeout(() => {
+              parentInputThrottleRef.current = null;
+              onUserInputChange(transcriptRef.current, undefined, undefined, false);
+            }, 160);
+          }
+        }
         setSarvamStatus('connected');
 
-        if (spoken) {
+        // Only append chat bubble on finalized speech or final segment commit
+        if (spoken && result.isFinal) {
           const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           const displayMsg = isWhisperMode ? `[whisper] 🎤 ${spoken}` : `🎤 ${spoken}`;
           setMessages((prev) => {
@@ -288,7 +309,7 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
                 ...currentMsg,
                 text: displayMsg,
                 time: timeNow,
-                isVoiceLive: true
+                isVoiceLive: false
               } as any;
               return next;
             }
@@ -299,7 +320,7 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
                 sender: 'user',
                 text: displayMsg,
                 time: timeNow,
-                isVoiceLive: true
+                isVoiceLive: false
               } as any
             ];
           });
@@ -483,7 +504,7 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
 
     setTranscript(updated);
     transcriptRef.current = updated;
-    onUserInputChange(updated);
+    onUserInputChange(updated, undefined, undefined, true);
     setChatInput('');
   }, [chatInput, onUserInputChange]);
 
@@ -510,7 +531,7 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
         const updated = transcript ? (transcript.includes(locSnippet) ? transcript : `${transcript}. ${locSnippet}`) : locSnippet;
         setTranscript(updated);
         transcriptRef.current = updated;
-        onUserInputChange(updated);
+        onUserInputChange(updated, undefined, undefined, true);
       } else if (loc.error) {
         alert(loc.error);
       }
@@ -841,7 +862,7 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
                       ...prev,
                       { sender: 'user', text: '[SILENT SOS TRIGGERED - Immediate Help Needed]', time: timeNow }
                     ]);
-                    onUserInputChange('[SILENT SOS] Immediate danger. Need assistance without speaking.');
+                    onUserInputChange('[SILENT SOS] Immediate danger. Need assistance without speaking.', undefined, undefined, true);
                   }}
                   className="silent-sos-card"
                   style={{ cursor: 'pointer' }}
@@ -1293,7 +1314,7 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
                     if (next && transcript && !transcript.includes('[whisper]')) {
                       const updated = `[whisper] ${transcript}`;
                       setTranscript(updated);
-                      onUserInputChange(updated);
+                      onUserInputChange(updated, undefined, undefined, true);
                     }
                   }}
                   style={{
@@ -1590,7 +1611,7 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
                           const updated = transcript ? `${transcript}. ${chip}` : chip;
                           setTranscript(updated);
                           transcriptRef.current = updated;
-                          onUserInputChange(updated);
+                          onUserInputChange(updated, undefined, undefined, true);
                         }}
                         className="chat-quick-chip"
                       >
