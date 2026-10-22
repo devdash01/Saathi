@@ -22,6 +22,7 @@ import { TacticalEmergencyMap } from './TacticalEmergencyMap';
 import { deviceLocationService } from '../services/deviceLocationService';
 import { emergencyContactService } from '../services/emergencyContactService';
 import { EmergencyContactModal } from './EmergencyContactModal';
+import { HighlightedEmergencyText } from '../services/emergencyKeywordService';
 import type { EmergencyServiceEntity } from '../services/locationService';
 import type { SafeSignalQuestion, AgencyDispatchState, EmergencyContact } from '../types';
 import type { EmergencyReport } from '../types/report';
@@ -1232,7 +1233,7 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
                 </div>
                 <div style={{ fontSize: '0.88rem', color: transcript ? '#f1f5f9' : '#94a3b8', lineHeight: 1.5, fontWeight: 500, minHeight: '36px' }}>
                   {transcript ? (
-                    <span>{transcript}</span>
+                    <HighlightedEmergencyText text={transcript} fallbackStyle={{ color: '#f1f5f9' }} />
                   ) : (
                     <span style={{ fontStyle: 'italic', opacity: 0.8 }}>
                       No words spoken yet. Tap the microphone above to speak into your mic, or use "Type instead" below.
@@ -1442,7 +1443,13 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
                 ) : (
                   messages.map((m, idx) => (
                     <div key={idx} className={m.sender === 'user' ? 'bubble-user-blue' : 'bubble-operator-white'}>
-                      <div>{m.text}</div>
+                      <div>
+                        {m.sender === 'user' ? (
+                          <HighlightedEmergencyText text={m.text} />
+                        ) : (
+                          m.text
+                        )}
+                      </div>
                       <div style={{ fontSize: '0.6rem', textAlign: 'right', marginTop: '2px', opacity: 0.8 }}>
                         {m.time}
                       </div>
@@ -1867,7 +1874,7 @@ export const UserPhoneView: React.FC<UserPhoneViewProps> = ({
                   <div style={{ padding: '16px', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '8px', color: '#64748b', fontSize: '0.75rem', textAlign: 'center' }}>
                     {transcript ? (
                       <div>
-                        <strong>Heard:</strong> "{transcript}"
+                        <strong>Heard:</strong> <HighlightedEmergencyText text={transcript} />
                       </div>
                     ) : (
                       'No emergency statements recorded yet. Speak via Call (Screen 2) or type in Chat (Screen 3) to begin.'

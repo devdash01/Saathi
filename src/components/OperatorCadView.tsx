@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { TacticalEmergencyMap } from './TacticalEmergencyMap';
 import { emergencyContactService } from '../services/emergencyContactService';
-import { parseEmergencyKeywords } from '../services/emergencyKeywordService';
+import { parseEmergencyKeywords, HighlightedEmergencyText } from '../services/emergencyKeywordService';
 import type {
   StructuredTriage,
   SafetyFloor,
@@ -1060,6 +1060,34 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
                   </div>
                 )}
 
+                {hasInput && (() => {
+                  const parsed = parseEmergencyKeywords(rawCallerText);
+                  if (!parsed.detectedKeywords.length) return null;
+                  return (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed #cbd5e1' }}>
+                      {parsed.detectedKeywords.map((kw, i) => (
+                        <span
+                          key={i}
+                          style={{
+                            background: kw.color,
+                            color: '#ffffff',
+                            fontSize: '0.6rem',
+                            fontWeight: 800,
+                            padding: '2px 6px',
+                            borderRadius: '3px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '3px'
+                          }}
+                        >
+                          <span style={{ opacity: 0.85, fontSize: '0.55rem' }}>{kw.label}</span>
+                          <span>"{kw.word}"</span>
+                        </span>
+                      ))}
+                    </div>
+                  );
+                })()}
+
                 <div style={{ fontSize: '0.62rem', color: '#64748b', marginTop: '2px' }}>
                   P1 triggers: <span style={{ color: '#dc2626' }}>Haan to danger · weapon · injury · child at risk</span>
                 </div>
@@ -1508,7 +1536,7 @@ export const OperatorCadView: React.FC<OperatorCadProps> = ({
                       <div style={{ display: 'flex', gap: '8px' }}>
                         <span style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.66rem', width: '54px' }}>LIVE</span>
                         <span style={{ color: '#dc2626', fontWeight: 800, width: '60px' }}>CALLER</span>
-                        <span>{rawCallerText}</span>
+                        <span><HighlightedEmergencyText text={rawCallerText} /></span>
                       </div>
 
                       <div style={{ display: 'flex', gap: '8px' }}>

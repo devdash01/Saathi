@@ -9,6 +9,7 @@ import type {
 } from '../types';
 import { LX } from '../data/lexiconData';
 import { extractLocationFromSpeech } from './locationService';
+import { parseEmergencyKeywords } from './emergencyKeywordService';
 
 export interface TriageRule {
   id: string;
@@ -603,6 +604,35 @@ export function analyzeIncomingTranscript(
       severity: 'medium',
       ruleEnforced: false
     });
+  }
+
+  // Integrate all 34 Emergency Categories detected keywords into evidence signals
+  const kwParsed = parseEmergencyKeywords(trimmed);
+  for (const kw of kwParsed.detectedKeywords) {
+    if (!evidenceLinks.some(e => e.quoteHinglish.toLowerCase() === kw.word.toLowerCase())) {
+      let cat: WarningSignCategory = 'caller_safety';
+      if (['threat', 'weapon', 'distress', 'threat_to_life', 'mass_casualty', 'robbery', 'domestic_violence', 'stalking'].includes(kw.category)) {
+        cat = 'threat';
+      } else if (['medical', 'poisoning', 'physical_hazard', 'pregnancy'].includes(kw.category)) {
+        cat = 'injury';
+      } else if (['child_risk', 'dependent_care'].includes(kw.category)) {
+        cat = 'child_at_risk';
+      } else if (kw.category === 'location_escape') {
+        cat = 'location';
+      }
+
+      evidenceLinks.push({
+        id: `ev-kw-${kw.word}-${Date.now()}`,
+        category: cat,
+        label: kw.label,
+        quoteHinglish: kw.word,
+        englishTranslation: kw.label,
+        timestamp: 'Live',
+        confidence: 0.95,
+        severity: ['distress', 'threat_to_life', 'mass_casualty', 'weapon'].includes(kw.category) ? 'critical' : 'high',
+        ruleEnforced: false
+      });
+    }
   }
 
   const threatsList: string[] = [];
